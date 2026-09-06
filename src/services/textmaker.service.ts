@@ -27,10 +27,13 @@ function escapeXml(s: string): string {
     .replace(/'/g, '&apos;');
 }
 
-/** Fit font size roughly to the text length. */
+/** Fit font size to the text so it stays inside the canvas width. */
 function fontSize(text: string): number {
   const len = Math.max(text.length, 1);
-  return Math.max(48, Math.min(180, Math.floor(1600 / len)));
+  // Arial Black glyphs are ~0.62 of the font size wide on average.
+  // Keep total width within ~88% of the canvas.
+  const maxByWidth = Math.floor((W * 0.80) / (len * 0.68));
+  return Math.max(36, Math.min(160, maxByWidth));
 }
 
 function svgFor(style: TextStyle, raw: string): string {
