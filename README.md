@@ -14,9 +14,10 @@ Clean architecture · auto-loading commands · middleware pipeline · AI · stic
 
 - ⚡ **Dual login** — QR code *or* 8-digit pairing code
 - 🔁 **Auto-reconnect** on disconnect (survives drops)
-- 🧩 **Auto-loading commands** — add a file, it just works
+- 🧩 **43 auto-loading commands** — add a file, it just works
 - 🛡️ **Middleware** — cooldown, owner/admin permissions, ban list, anti-link
-- 🤖 **AI built in** — `.ai`, `.translate` (OpenAI / Groq / OpenRouter compatible)
+- 🤖 **AI built in** — `.ai`, `.translate` (OpenAI / Groq / OpenRouter / **Gemini**)
+- 🔌 **20+ free-API commands** — weather, wiki, github, memes, and more (no keys)
 - 🎨 **Sticker maker** — image/video → sticker, and sticker → image
 - 👥 **Full group tools** — kick, add, promote, demote, tagall, lock/unlock, welcome
 - 🎉 **Fun** — quote, joke, dice, coinflip
@@ -82,7 +83,7 @@ phone number** and enter the code shown.
 
 ---
 
-## 💬 Commands (29 built in)
+## 💬 Commands (43 built in)
 
 ### General
 | Command | Description |
@@ -94,17 +95,32 @@ phone number** and enter the code shown.
 | `.info` | About the bot |
 | `.uptime` | How long it's been running |
 
-### AI
+### AI *(needs a key — OpenAI-compatible or Gemini)*
 | Command | Description |
 |---------|-------------|
 | `.ai <question>` | Ask the AI anything |
 | `.translate <lang> <text>` | Translate text |
 
-### Fun
+### Tools *(free APIs — no key needed)*
+| Command | Description |
+|---------|-------------|
+| `.weather <city>` | Current weather |
+| `.wiki <topic>` | Wikipedia summary |
+| `.github <user>` | GitHub profile lookup |
+| `.ip <address>` | IP geolocation |
+| `.qr <text>` | Generate a QR code |
+| `.shorten <url>` | Shorten a URL |
+| `.calc <expr>` | Safe calculator |
+
+### Fun *(free APIs — no key needed)*
 | Command | Description |
 |---------|-------------|
 | `.quote` | Random inspirational quote |
 | `.joke` | Random joke |
+| `.meme` | Random meme |
+| `.dog` / `.cat` | Random animal pic |
+| `.advice` | Random advice |
+| `.fact` | Random fact |
 | `.dice [max]` | Roll a dice |
 | `.coinflip` | Flip a coin |
 
@@ -114,6 +130,8 @@ phone number** and enter the code shown.
 | `.sticker` | Image/video → sticker |
 | `.toimg` | Sticker → image |
 | `.download <url>` | Download a direct media URL |
+| `.tiktok <url>` | Download TikTok (no watermark) |
+| `.play <name>` | Search YouTube |
 
 ### Group (admin)
 | Command | Description |

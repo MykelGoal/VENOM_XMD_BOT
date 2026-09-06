@@ -47,6 +47,10 @@ export const env = {
     model: optional('AI_MODEL', 'gpt-4o-mini'),
     baseUrl: optional('AI_BASE_URL', 'https://api.openai.com/v1'),
     autoReply: bool('AI_AUTO_REPLY', false),
+    gemini: {
+      apiKey: optional('GEMINI_API_KEY', ''),
+      model: optional('GEMINI_MODEL', 'gemini-1.5-flash'),
+    },
   },
 
   // Sticker

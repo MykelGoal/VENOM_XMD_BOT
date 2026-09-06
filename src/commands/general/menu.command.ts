@@ -12,7 +12,15 @@ const menu: Command = {
   usage: 'menu',
   async run({ sock, msg, prefix }) {
     const grouped = commandsByCategory();
-    const order = ['general', 'ai', 'fun', 'media', 'group', 'owner'];
+    const order = [
+      'general',
+      'ai',
+      'tools',
+      'media',
+      'fun',
+      'group',
+      'owner',
+    ];
 
     const header = [
       `╭─「 *${env.botName}* 」`,

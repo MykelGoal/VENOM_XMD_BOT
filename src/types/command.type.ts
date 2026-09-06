@@ -7,6 +7,7 @@ export type CommandCategory =
   | 'group'
   | 'media'
   | 'ai'
+  | 'tools'
   | 'fun'
   | 'owner';
 
