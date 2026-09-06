@@ -10,6 +10,9 @@ export type CommandCategory =
   | 'tools'
   | 'fun'
   | 'game'
+  | 'image'
+  | 'textmaker'
+  | 'search'
   | 'owner';
 
 /** Context object passed into every command's run() method. */
