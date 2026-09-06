@@ -55,9 +55,58 @@ function decodeLongId(raw: string): string {
   return zlib.gunzipSync(gz).toString('utf8');
 }
 
-/** Decode a legacy plain base64 session into the raw creds.json string. */
-function decodePlain(raw: string): string {
-  return Buffer.from(raw, 'base64').toString('utf8');
+/**
+ * Decode a self-contained session ID (what the session site hands out).
+ * Robust to common paste variants — we accept whatever yields valid creds JSON:
+ *   1) already-raw creds.json  ({"noiseKey":...})
+ *   2) plain base64 of creds.json  (eyJ...)  ← the usual case
+ *   3) an optional "PREFIX;base64" / "PREFIX~base64" wrapper
+ */
+function decodeSelfContained(raw: string): string {
+  const looksLikeJson = (s: string) => {
+    const t = s.trim();
+    if (!t.startsWith('{')) return false;
+    try {
+      JSON.parse(t);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  // 1) Pasted creds.json directly.
+  if (looksLikeJson(raw)) return raw.trim();
+
+  // Build candidate base64 strings to try (with and without a prefix wrapper).
+  const candidates = new Set<string>();
+  const cleaned = raw.trim().replace(/\s+/g, '');
+  candidates.add(cleaned);
+  const sepMatch = cleaned.match(/[;~:|]/);
+  if (sepMatch) candidates.add(cleaned.slice(cleaned.indexOf(sepMatch[0]) + 1));
+
+  for (const cand of candidates) {
+    // 2) gzip'd base64url (VENOM~ style, but prefix already stripped)
+    try {
+      const gz = Buffer.from(cand, 'base64url');
+      if (gz[0] === 0x1f && gz[1] === 0x8b) {
+        const out = zlib.gunzipSync(gz).toString('utf8');
+        if (looksLikeJson(out)) return out;
+      }
+    } catch {
+      /* try next */
+    }
+    // 3) plain base64 → JSON
+    try {
+      const out = Buffer.from(cand, 'base64').toString('utf8');
+      if (looksLikeJson(out)) return out;
+    } catch {
+      /* try next */
+    }
+  }
+
+  throw new Error(
+    'Unrecognised SESSION_ID. Re-copy it from the session site (should look like eyJ… or VENOM~…).',
+  );
 }
 
 /** Fetch creds for a short VENOM-ID from the session site (cloud → grab fallback). */
@@ -129,17 +178,20 @@ export async function restoreSessionFromEnv(): Promise<void> {
         JSON.stringify({ code, token: cloudToken || '' }),
         'utf8',
       );
-    } else if (/^[A-Za-z0-9+/=_-]+$/.test(raw) && raw.length > 100) {
-      logger.info('Restoring session from plain base64 SESSION_ID (legacy)…');
-      credsJson = decodePlain(raw);
     } else {
-      throw new Error(
-        'Unrecognised SESSION_ID format. Expected VENOM~..., VENOM-XXXX-XXXX, or a base64 creds string.',
-      );
+      // Self-contained session (what the VENOM session site hands out):
+      // usually plain base64 of creds.json (eyJ...), but be tolerant of a
+      // stray prefix, whitespace, or creds.json pasted raw. We decide by
+      // "does it decode to valid creds JSON", not by a fragile length guess.
+      logger.info('Restoring session from self-contained SESSION_ID…');
+      credsJson = decodeSelfContained(raw);
     }
 
-    // Validate it parses as JSON before committing it to disk.
-    JSON.parse(credsJson);
+    // Validate it parses as valid creds JSON before committing it to disk.
+    const parsed = JSON.parse(credsJson);
+    if (!parsed || typeof parsed !== 'object' || !('noiseKey' in parsed || 'me' in parsed || 'registered' in parsed)) {
+      throw new Error('decoded data does not look like WhatsApp credentials.');
+    }
     fs.writeFileSync(CREDS_FILE, credsJson, 'utf8');
     logger.info('✅ Session restored from SESSION_ID — starting pre-authenticated.');
   } catch (e: any) {

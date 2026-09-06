@@ -18,6 +18,15 @@ async function main(): Promise<void> {
 
   installGlobalErrorHandlers();
 
+  // OWNER_NUMBER is effectively required — without it, owner-only commands
+  // refuse everyone. Warn loudly but still boot so the user can react.
+  if (env.ownerNumbers.length === 0) {
+    logger.warn(
+      '⚠️  OWNER_NUMBER is not set — owner/admin commands will be disabled. ' +
+        'Set OWNER_NUMBER in your .env (e.g. 2348012345678).',
+    );
+  }
+
   // If SESSION_ID is set, restore creds before connecting (skips QR/pairing).
   await restoreSessionFromEnv();
 

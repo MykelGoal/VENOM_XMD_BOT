@@ -64,48 +64,46 @@ npm run build && npm start
 
 ### Configuration (`.env`)
 
-| Var | What it does |
-|-----|--------------|
-| `BOT_NAME` | Display name |
-| `PREFIX` | Command prefix (default `.`) |
-| `OWNER_NUMBER` | Your number(s), e.g. `2348012345678` |
-| `SESSION_ID` | Paste a session from the [session site](https://github.com/MykelGoal/session-site) to deploy pre-authenticated (no QR) |
-| `SESSION_SITE_URL` | Your session site URL — needed only for the short `VENOM-XXXX-XXXX` ID |
-| `LOGIN_METHOD` | `qr`, `pairing`, or `both` (used only when `SESSION_ID` is blank) |
-| `PAIRING_NUMBER` | Phone number for pairing-code login |
-| `AI_API_KEY` | Key for AI commands (OpenAI-compatible) |
-| `AI_MODEL` | e.g. `gpt-4o-mini` |
-| `AI_BASE_URL` | API base URL (swap for Groq/OpenRouter) |
-| `AI_AUTO_REPLY` | `true` to auto-answer normal DMs with AI |
-| `STICKER_PACK` / `STICKER_AUTHOR` | Sticker metadata |
+**You only need TWO variables to deploy:**
+
+| Var | Required? | What it does |
+|-----|:---:|--------------|
+| `SESSION_ID` | ✅ **Yes** | Paste the session from the session site — the bot starts pre-authenticated (no QR) |
+| `OWNER_NUMBER` | ✅ **Yes** | Your number(s), e.g. `2348012345678` — enables owner/admin commands |
+
+Everything else is optional (sensible defaults):
+
+| Var | Default | What it does |
+|-----|---------|--------------|
+| `BOT_NAME` | `VENOM-XMD` | Display name |
+| `PREFIX` | `.` | Command prefix |
+| `SESSION_SITE_URL` | *(built-in)* | Pre-set to the public session site; only change if you self-host |
+| `LOGIN_METHOD` | `both` | `qr` / `pairing` / `both` — used only when `SESSION_ID` is blank |
+| `PAIRING_NUMBER` | *(empty)* | Phone number for pairing-code login |
+| `AI_API_KEY` · `AI_MODEL` · `AI_BASE_URL` | *(empty)* | Only for `.ai` / `.translate` (OpenAI-compatible) |
+| `AI_AUTO_REPLY` | `false` | Auto-answer normal DMs with AI |
+| `STICKER_PACK` · `STICKER_AUTHOR` | `VENOM-XMD` / `venom` | Sticker metadata |
 
 ### 🔑 Deploying with a `SESSION_ID` (recommended)
 
 No terminal, no QR on the server. Pair **once** and paste the result:
 
-1. Open the **[VENOM session site](https://github.com/MykelGoal/session-site)**.
+1. Open the **[VENOM session site](https://session-site-2odn.onrender.com)**.
 2. Pick **QR** or **Pairing Code** and link your WhatsApp.
 3. It shows a session ID (and DMs it to you). Copy it.
-4. Set it in your host's environment:
+4. Set just these two in your host's environment:
 
    ```env
-   SESSION_ID=VENOM-XXXX-XXXX
-   SESSION_SITE_URL=https://your-session-site.onrender.com
+   SESSION_ID=eyJub2lzZUtleSI6...
+   OWNER_NUMBER=2348012345678
    ```
 
-5. Deploy. The bot decodes/fetches the credentials at startup and connects
-   already authenticated. 🎉
+5. Deploy. The bot decodes the credentials at startup and connects already
+   authenticated. 🎉
 
-**Session ID formats accepted:**
-
-| Format | Example | Needs `SESSION_SITE_URL`? | Notes |
-|--------|---------|:---:|-------|
-| **Short** | `VENOM-K7M2-9XPQ` | ✅ | Recommended — permanent & cloud-backed; the bot auto-refreshes it |
-| **Long** | `VENOM~H4sIAAAA…` | ❌ | Self-contained, decodes offline |
-| **Plain** | `eyJub2lzZUtleSI6…` | ❌ | Base64 creds (legacy) |
-
-> With a short ID, the bot keeps its cloud copy fresh on every credential
-> rotation, so redeploys always restore a valid session automatically.
+The `SESSION_ID` is **self-contained** — the bot auto-detects the format and
+decodes it, so you don't need any extra URLs or keys. It accepts a base64
+session (`eyJ…`), a `VENOM~…` string, or even raw `creds.json`.
 
 **Login without a session ID:** leave `SESSION_ID` blank. With `LOGIN_METHOD=qr`,
 scan the code printed in the terminal. With `pairing`, set `PAIRING_NUMBER`, then

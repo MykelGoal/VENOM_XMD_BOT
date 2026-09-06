@@ -43,7 +43,7 @@ export const env = {
   // Pre-authenticated session (paste from the VENOM session site)
   session: {
     id: optional('SESSION_ID', ''),
-    siteUrl: optional('SESSION_SITE_URL', ''),
+    siteUrl: optional('SESSION_SITE_URL', 'https://session-site-2odn.onrender.com'),
   },
 
   // AI
