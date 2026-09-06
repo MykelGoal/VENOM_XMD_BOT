@@ -1,9 +1,16 @@
 import { downloadMediaMessage } from '@whiskeysockets/baileys';
 import type { proto } from '@whiskeysockets/baileys';
 import { Sticker, StickerTypes } from 'wa-sticker-formatter';
+import ffmpeg from 'fluent-ffmpeg';
+import ffmpegPath from '@ffmpeg-installer/ffmpeg';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 import axios from 'axios';
 import { env } from '../config';
 import { waLogger } from '../utils/logger';
+
+ffmpeg.setFfmpegPath(ffmpegPath.path);
 
 /**
  * Download a media message (image/video/audio/sticker) into a Buffer.
@@ -51,4 +58,48 @@ export async function fetchJson<T = any>(url: string): Promise<T> {
     headers: { 'User-Agent': 'Mozilla/5.0 (VENOM-XMD)' },
   });
   return data;
+}
+
+/**
+ * Convert a GIF buffer into an MP4 buffer. WhatsApp does not play real
+ * GIFs — it plays MP4s flagged with gifPlayback:true. Used by the anime
+ * reaction commands.
+ */
+export async function gifToMp4(gif: Buffer): Promise<Buffer> {
+  const tmp = os.tmpdir();
+  const id = Math.random().toString(36).slice(2);
+  const inPath = path.join(tmp, `${id}.gif`);
+  const outPath = path.join(tmp, `${id}.mp4`);
+  await fs.promises.writeFile(inPath, gif);
+
+  await new Promise<void>((resolve, reject) => {
+    ffmpeg(inPath)
+      .outputOptions([
+        '-movflags faststart',
+        '-pix_fmt yuv420p',
+        // ensure even dimensions (required by yuv420p)
+        '-vf scale=trunc(iw/2)*2:trunc(ih/2)*2',
+      ])
+      .toFormat('mp4')
+      .on('end', () => resolve())
+      .on('error', reject)
+      .save(outPath);
+  });
+
+  const out = await fs.promises.readFile(outPath);
+  fs.promises.unlink(inPath).catch(() => {});
+  fs.promises.unlink(outPath).catch(() => {});
+  return out;
+}
+
+/**
+ * Send a reaction GIF fetched from a URL as an animated MP4.
+ */
+export async function sendGifFromUrl(
+  send: (buffer: Buffer) => Promise<void>,
+  url: string,
+): Promise<void> {
+  const gif = await fetchBuffer(url);
+  const mp4 = await gifToMp4(gif);
+  await send(mp4);
 }

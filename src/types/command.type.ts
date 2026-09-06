@@ -9,6 +9,7 @@ export type CommandCategory =
   | 'ai'
   | 'tools'
   | 'fun'
+  | 'game'
   | 'owner';
 
 /** Context object passed into every command's run() method. */

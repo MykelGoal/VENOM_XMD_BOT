@@ -18,6 +18,7 @@ const menu: Command = {
       'tools',
       'media',
       'fun',
+      'game',
       'group',
       'owner',
     ];
