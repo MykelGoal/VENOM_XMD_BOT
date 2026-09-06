@@ -14,7 +14,7 @@ Clean architecture · auto-loading commands · middleware pipeline · AI · stic
 
 - ⚡ **Dual login** — QR code *or* 8-digit pairing code
 - 🔁 **Auto-reconnect** on disconnect (survives drops)
-- 🧩 **290 auto-loading commands** — add a file, it just works
+- 🧩 **302 auto-loading commands** — add a file, it just works
 - 🛡️ **Middleware** — cooldown, owner/admin permissions, ban list, anti-link
 - 🤖 **AI built in** — `.ai`, `.translate` (OpenAI / Groq / OpenRouter / **Gemini**)
 - 🔌 **20+ free-API commands** — weather, wiki, github, memes, and more (no keys)
@@ -83,7 +83,7 @@ phone number** and enter the code shown.
 
 ---
 
-## 💬 Commands (290 built in)
+## 💬 Commands (302 built in)
 
 ### General
 | Command | Description |
@@ -111,6 +111,22 @@ phone number** and enter the code shown.
 | `.qr <text>` | Generate a QR code |
 | `.shorten <url>` | Shorten a URL |
 | `.calc <expr>` | Safe calculator |
+
+### Utilities *(100% offline — no API)*
+| Command | Description |
+|---------|-------------|
+| `.base64 encode/decode <text>` | Base64 encode/decode |
+| `.binary <text\|bits>` | Text ↔ binary (auto-detect) |
+| `.hex <text\|hex>` | Text ↔ hex (auto-detect) |
+| `.morse <text\|code>` | Text ↔ Morse (auto-detect) |
+| `.hash <algo> <text>` · `.md5` · `.sha256` | Hash text |
+| `.uuid [n]` | Generate UUID v4 |
+| `.password [len]` | Strong random password |
+| `.mock <text>` | mOcKiNg CaSe |
+| `.vaporwave <text>` | Ａｅｓｔｈｅｔｉｃ full-width |
+| `.emojify <text>` | 🇧🇮🇬 emoji letters |
+| `.reversetext <text>` | Reverse text |
+| `.repeat <n> <text>` | Repeat text n times |
 
 ### Fun *(free APIs — no key needed)*
 | Command | Description |
