@@ -18,6 +18,7 @@ const menu: Command = {
       'tools',
       'search',
       'downloader',
+      'anime',
       'media',
       'converter',
       'image',

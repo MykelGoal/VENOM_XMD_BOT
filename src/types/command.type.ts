@@ -19,6 +19,7 @@ export type CommandCategory =
   | 'converter'
   | 'search'
   | 'downloader'
+  | 'anime'
   | 'owner';
 
 /** Context object passed into every command's run() method. */

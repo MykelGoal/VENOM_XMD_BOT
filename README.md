@@ -14,7 +14,7 @@ Clean architecture · auto-loading commands · middleware pipeline · AI · stic
 
 - ⚡ **Dual login** — QR code *or* 8-digit pairing code
 - 🔁 **Auto-reconnect** on disconnect (survives drops)
-- 🧩 **267 auto-loading commands** — add a file, it just works
+- 🧩 **276 auto-loading commands** — add a file, it just works
 - 🛡️ **Middleware** — cooldown, owner/admin permissions, ban list, anti-link
 - 🤖 **AI built in** — `.ai`, `.translate` (OpenAI / Groq / OpenRouter / **Gemini**)
 - 🔌 **20+ free-API commands** — weather, wiki, github, memes, and more (no keys)
@@ -83,7 +83,7 @@ phone number** and enter the code shown.
 
 ---
 
-## 💬 Commands (267 built in)
+## 💬 Commands (276 built in)
 
 ### General
 | Command | Description |
@@ -143,6 +143,18 @@ phone number** and enter the code shown.
 | `.spotify <url>` | Download a Spotify track |
 | `.apk <app>` | Search & download an Android APK |
 | `.lyrics <song>` | Fetch song lyrics |
+
+### Anime *(free APIs — no key)*
+| Command | Description |
+|---------|-------------|
+| `.anime <title>` | Anime info + poster (Kitsu) |
+| `.manga <title>` | Manga info + cover |
+| `.character <name>` | Character info + image |
+| `.animequote` | Random anime quote |
+| `.waifu` / `.husbando` | Random waifu / husbando image |
+| `.neko` / `.kitsune` / `.catgirl` | Random neko / foxgirl / catgirl image |
+
+_Plus 52 reaction-GIF commands (`.hug`, `.slap`, `.pat`, …) under the **Fun** category._
 
 ### Group (admin)
 | Command | Description |
