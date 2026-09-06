@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Secrets
+.env
+
+# WhatsApp auth session (NEVER commit this)
+sessions/*
+!sessions/.gitkeep
+
+# Temp media
+media/*
+!media/.gitkeep
+
+# Logs
+logs/*
+!logs/.gitkeep
+*.log
+
+# JSON database store
+database-store/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

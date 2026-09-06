@@ -1,0 +1,10 @@
+node_modules
+dist
+sessions
+media
+logs
+database-store
+.env
+.git
+.github
+*.log
