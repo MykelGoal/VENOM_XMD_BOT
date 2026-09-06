@@ -3,6 +3,7 @@ import { logger } from './utils/logger';
 import { installGlobalErrorHandlers } from './handlers/error.handler';
 import { startConnection } from './core/connection';
 import { restoreSessionFromEnv } from './core/session';
+import { startKeepAlive } from './core/keepalive';
 
 const BANNER = `
 ╭──────────────────────────────╮
@@ -26,6 +27,9 @@ async function main(): Promise<void> {
         'Set OWNER_NUMBER in your .env (e.g. 2348012345678).',
     );
   }
+
+  // Bind $PORT so free web hosts (Render/Koyeb/Railway) keep the app alive.
+  startKeepAlive();
 
   // If SESSION_ID is set, restore creds before connecting (skips QR/pairing).
   await restoreSessionFromEnv();

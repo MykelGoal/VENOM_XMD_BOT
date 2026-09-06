@@ -1,0 +1,39 @@
+{
+  "name": "VENOM-XMD",
+  "description": "VENOM-XMD — a modular, production-ready WhatsApp bot built with Baileys + TypeScript. 300+ commands.",
+  "keywords": ["whatsapp", "bot", "baileys", "venom-xmd", "typescript"],
+  "repository": "https://github.com/MykelGoal/VENOM_XMD_BOT",
+  "logo": "https://raw.githubusercontent.com/MykelGoal/VENOM_XMD_BOT/main/assets/logo.png",
+  "success_url": "/",
+  "stack": "container",
+  "env": {
+    "SESSION_ID": {
+      "description": "Your session ID from https://session-site-2odn.onrender.com (pair once, paste here).",
+      "required": true
+    },
+    "OWNER_NUMBER": {
+      "description": "Your WhatsApp number in international format, no + (e.g. 2348012345678). Comma-separate for multiple owners.",
+      "required": true
+    },
+    "BOT_NAME": {
+      "description": "Display name for the bot.",
+      "value": "VENOM-XMD",
+      "required": false
+    },
+    "PREFIX": {
+      "description": "Command prefix.",
+      "value": ".",
+      "required": false
+    },
+    "AI_API_KEY": {
+      "description": "(Optional) OpenAI-compatible key for the .ai / .translate commands.",
+      "required": false
+    }
+  },
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "eco"
+    }
+  }
+}

@@ -18,7 +18,10 @@
     "venom-xmd",
     "typescript"
   ],
-  "author": "",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "author": "MykelGoal",
   "license": "MIT",
   "dependencies": {
     "@distube/ytdl-core": "^4.16.12",
