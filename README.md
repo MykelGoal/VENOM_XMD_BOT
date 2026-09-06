@@ -14,7 +14,7 @@ Clean architecture · auto-loading commands · middleware pipeline · AI · stic
 
 - ⚡ **Dual login** — QR code *or* 8-digit pairing code
 - 🔁 **Auto-reconnect** on disconnect (survives drops)
-- 🧩 **280 auto-loading commands** — add a file, it just works
+- 🧩 **290 auto-loading commands** — add a file, it just works
 - 🛡️ **Middleware** — cooldown, owner/admin permissions, ban list, anti-link
 - 🤖 **AI built in** — `.ai`, `.translate` (OpenAI / Groq / OpenRouter / **Gemini**)
 - 🔌 **20+ free-API commands** — weather, wiki, github, memes, and more (no keys)
@@ -83,7 +83,7 @@ phone number** and enter the code shown.
 
 ---
 
-## 💬 Commands (280 built in)
+## 💬 Commands (290 built in)
 
 ### General
 | Command | Description |
@@ -165,6 +165,21 @@ _Plus 52 reaction-GIF commands (`.hug`, `.slap`, `.pat`, …) under the **Fun** 
 | `.exif` | Read metadata of a replied image |
 | `.blur` `.sepia` `.invert` `.pixelate` … | 15+ image filters (reply to an image) |
 | `.wasted` `.jail` `.triggered` `.glass` … | Meme/canvas overlays |
+
+### User / Privacy (owner)
+| Command | Description |
+|---------|-------------|
+| `.setname <name>` | Change bot display name |
+| `.setbio <text>` | Change bot about/bio |
+| `.setpp` | Set bot profile picture (reply to image) |
+| `.getpp [@user]` | Fetch a user's profile picture |
+| `.getbio [@user]` | Fetch a user's about/bio |
+| `.block` / `.unblock` / `.blocklist` | Manage blocked users |
+| `.archive` / `.unarchive` | Archive / unarchive a chat |
+| `.pin` / `.unpin` | Pin / unpin a chat |
+| `.clearchat` | Clear the current chat |
+| `.presence <state>` | Set online/typing/recording presence |
+| `.vv` | Reveal a view-once message (reply to it) |
 
 ### Group (admin)
 | Command | Description |

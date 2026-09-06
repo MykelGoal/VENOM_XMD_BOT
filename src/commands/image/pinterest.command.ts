@@ -4,7 +4,7 @@ import { pinterest } from '../../services/imagesearch.service';
 
 const pinterestCmd: Command = {
   name: 'pinterest',
-  aliases: ['pin', 'img', 'image'],
+  aliases: ['pint', 'img', 'image'],
   category: 'image',
   description: 'Search images on Pinterest.',
   usage: 'pinterest <query> [count]',
