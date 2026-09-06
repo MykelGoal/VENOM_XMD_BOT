@@ -7,7 +7,7 @@
 ### The Ultimate Multi-Device WhatsApp Bot — **300+ commands**, built on [Baileys](https://github.com/WhiskeySockets/Baileys) + TypeScript
 
 <p align="center">
-  <img src="https://img.shields.io/badge/commands-302-39ff88?style=for-the-badge&labelColor=050806" alt="commands"/>
+  <img src="https://img.shields.io/badge/commands-392-39ff88?style=for-the-badge&labelColor=050806" alt="commands"/>
   <img src="https://img.shields.io/badge/language-TypeScript-3178c6?style=for-the-badge&labelColor=050806" alt="typescript"/>
   <img src="https://img.shields.io/badge/baileys-multi--device-00d95f?style=for-the-badge&labelColor=050806" alt="baileys"/>
   <img src="https://img.shields.io/badge/license-MIT-b6ff3c?style=for-the-badge&labelColor=050806" alt="license"/>
@@ -119,7 +119,7 @@ That's your key. Keep it secret — **it's like a password.**
 
 ## ✨ Features
 
-- 🧩 **302 auto-loading commands** across **19 categories** — drop a file in, it just works
+- 🧩 **392 auto-loading commands** across **19 categories** — drop a file in, it just works
 - 🔑 **Session-ID deploy** — pair once on the site, paste, go. Zero QR on the server
 - 🔁 **Auto-reconnect** — survives drops and WhatsApp restarts
 - 🛡️ **Middleware pipeline** — cooldown, owner/admin permissions, ban list, anti-link
@@ -139,7 +139,7 @@ That's your key. Keep it secret — **it's like a password.**
 > Send `.menu` in any chat for the full, always-up-to-date list.
 
 <details>
-<summary><b>📋 Click to expand all 302 commands</b></summary>
+<summary><b>📋 Click to expand all 392 commands</b></summary>
 
 ### General
 | Command | Description |
@@ -307,7 +307,7 @@ src/
 ├── config/               # Env + constants
 ├── core/                 # Socket, auth, connection, session, keep-alive
 ├── handlers/             # Message / command / event / group / error routing
-├── commands/             # 302 auto-loaded commands (19 categories)
+├── commands/             # 392 auto-loaded commands (19 categories)
 ├── middleware/           # cooldown, permission, ban, antilink
 ├── services/             # message, media, ai, download, anime, textutils …
 ├── database/             # models + repositories (JSON store)
