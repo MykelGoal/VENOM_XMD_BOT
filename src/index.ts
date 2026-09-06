@@ -2,6 +2,7 @@ import { env } from './config';
 import { logger } from './utils/logger';
 import { installGlobalErrorHandlers } from './handlers/error.handler';
 import { startConnection } from './core/connection';
+import { restoreSessionFromEnv } from './core/session';
 
 const BANNER = `
 ╭──────────────────────────────╮
@@ -16,6 +17,10 @@ async function main(): Promise<void> {
   logger.info(`Login method: ${env.loginMethod} | Prefix: "${env.prefix}"`);
 
   installGlobalErrorHandlers();
+
+  // If SESSION_ID is set, restore creds before connecting (skips QR/pairing).
+  await restoreSessionFromEnv();
+
   await startConnection();
 }
 

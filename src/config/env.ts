@@ -40,6 +40,12 @@ export const env = {
   logLevel: optional('LOG_LEVEL', 'info'),
   cooldownMs: parseInt(optional('COOLDOWN_MS', '3000'), 10),
 
+  // Pre-authenticated session (paste from the VENOM session site)
+  session: {
+    id: optional('SESSION_ID', ''),
+    siteUrl: optional('SESSION_SITE_URL', ''),
+  },
+
   // AI
   ai: {
     provider: optional('AI_PROVIDER', 'openai'),

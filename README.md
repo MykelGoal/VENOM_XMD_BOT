@@ -69,7 +69,9 @@ npm run build && npm start
 | `BOT_NAME` | Display name |
 | `PREFIX` | Command prefix (default `.`) |
 | `OWNER_NUMBER` | Your number(s), e.g. `2348012345678` |
-| `LOGIN_METHOD` | `qr`, `pairing`, or `both` |
+| `SESSION_ID` | Paste a session from the [session site](https://github.com/MykelGoal/session-site) to deploy pre-authenticated (no QR) |
+| `SESSION_SITE_URL` | Your session site URL — needed only for the short `VENOM-XXXX-XXXX` ID |
+| `LOGIN_METHOD` | `qr`, `pairing`, or `both` (used only when `SESSION_ID` is blank) |
 | `PAIRING_NUMBER` | Phone number for pairing-code login |
 | `AI_API_KEY` | Key for AI commands (OpenAI-compatible) |
 | `AI_MODEL` | e.g. `gpt-4o-mini` |
@@ -77,9 +79,38 @@ npm run build && npm start
 | `AI_AUTO_REPLY` | `true` to auto-answer normal DMs with AI |
 | `STICKER_PACK` / `STICKER_AUTHOR` | Sticker metadata |
 
-**Login:** with `qr`, scan the code printed in the terminal. With `pairing`,
-set `PAIRING_NUMBER`, then on your phone go to **Linked Devices → Link with
-phone number** and enter the code shown.
+### 🔑 Deploying with a `SESSION_ID` (recommended)
+
+No terminal, no QR on the server. Pair **once** and paste the result:
+
+1. Open the **[VENOM session site](https://github.com/MykelGoal/session-site)**.
+2. Pick **QR** or **Pairing Code** and link your WhatsApp.
+3. It shows a session ID (and DMs it to you). Copy it.
+4. Set it in your host's environment:
+
+   ```env
+   SESSION_ID=VENOM-XXXX-XXXX
+   SESSION_SITE_URL=https://your-session-site.onrender.com
+   ```
+
+5. Deploy. The bot decodes/fetches the credentials at startup and connects
+   already authenticated. 🎉
+
+**Session ID formats accepted:**
+
+| Format | Example | Needs `SESSION_SITE_URL`? | Notes |
+|--------|---------|:---:|-------|
+| **Short** | `VENOM-K7M2-9XPQ` | ✅ | Recommended — permanent & cloud-backed; the bot auto-refreshes it |
+| **Long** | `VENOM~H4sIAAAA…` | ❌ | Self-contained, decodes offline |
+| **Plain** | `eyJub2lzZUtleSI6…` | ❌ | Base64 creds (legacy) |
+
+> With a short ID, the bot keeps its cloud copy fresh on every credential
+> rotation, so redeploys always restore a valid session automatically.
+
+**Login without a session ID:** leave `SESSION_ID` blank. With `LOGIN_METHOD=qr`,
+scan the code printed in the terminal. With `pairing`, set `PAIRING_NUMBER`, then
+on your phone go to **Linked Devices → Link with phone number** and enter the
+code shown.
 
 ---
 

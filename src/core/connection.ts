@@ -9,6 +9,7 @@ import { logger } from '../utils/logger';
 import { sleep } from '../utils/helpers';
 import { createClient } from './client';
 import { registerEventHandlers } from '../handlers/event.handler';
+import { syncSessionToCloud } from './session';
 
 let pairingRequested = false;
 
@@ -19,8 +20,12 @@ let pairingRequested = false;
 export async function startConnection(): Promise<void> {
   const { sock, auth } = await createClient();
 
-  // Persist credentials whenever they update.
-  sock.ev.on('creds.update', auth.saveCreds);
+  // Persist credentials whenever they update, and keep the cloud copy fresh
+  // so a redeploy (with only SESSION_ID) always restores a valid session.
+  sock.ev.on('creds.update', async () => {
+    await auth.saveCreds();
+    void syncSessionToCloud();
+  });
 
   // Wire all app-level event handlers (messages, groups, etc.).
   registerEventHandlers(sock);
