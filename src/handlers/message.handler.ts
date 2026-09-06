@@ -5,6 +5,8 @@ import { handleCommand } from './command.handler';
 import { enforceAntilink } from '../middleware/antilink';
 import { handleAfk } from './afk.handler';
 import { userRepo } from '../database/repositories/user.repo';
+import { settingsRepo } from '../database/repositories/settings.repo';
+import { msgCache } from '../core/msgcache';
 
 interface Upsert {
   messages: proto.IWebMessageInfo[];
@@ -30,11 +32,32 @@ export async function handleMessageUpsert(
     const msg = serializeMessage(raw, sock);
     if (!msg) continue;
 
+    // Cache for anti-delete (before we skip anything).
+    if (raw.key.id) {
+      msgCache.set(raw.key.id, {
+        raw,
+        sender: msg.sender,
+        chat: msg.chat,
+        at: Date.now(),
+      });
+    }
+
     // Ignore the bot's own messages (flip if you want self-commands).
     if (msg.fromMe) continue;
 
     // Track the user (first-seen, counts).
     userRepo.ensure(msg.senderNumber, raw.pushName ?? undefined);
+
+    // Passive presence behaviors.
+    if (settingsRepo.getBool('autoread')) {
+      await sock.readMessages([raw.key]).catch(() => {});
+    }
+    if (settingsRepo.getBool('autotyping')) {
+      await sock.sendPresenceUpdate('composing', msg.chat).catch(() => {});
+    }
+    if (settingsRepo.getBool('autorecord')) {
+      await sock.sendPresenceUpdate('recording', msg.chat).catch(() => {});
+    }
 
     // Passive: anti-link enforcement. If it blocked, stop here.
     if (await enforceAntilink(sock, msg)) continue;

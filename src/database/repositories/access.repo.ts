@@ -2,7 +2,7 @@ import { createCollection } from '../index';
 
 interface AccessEntry extends Record<string, unknown> {
   number: string;
-  role: 'sudo' | 'mod';
+  role: 'sudo' | 'mod' | 'ignored';
 }
 
 const store = createCollection<AccessEntry>('access');
@@ -10,19 +10,21 @@ const store = createCollection<AccessEntry>('access');
 /**
  * Manages sudo users (near-owner privileges) and mods (elevated helpers).
  */
+type Role = 'sudo' | 'mod' | 'ignored';
+
 export const accessRepo = {
-  add(number: string, role: 'sudo' | 'mod'): void {
+  add(number: string, role: Role): void {
     store.set(`${role}:${number}`, { number, role });
   },
-  remove(number: string, role: 'sudo' | 'mod'): boolean {
+  remove(number: string, role: Role): boolean {
     if (!store.get(`${role}:${number}`)) return false;
     store.delete(`${role}:${number}`);
     return true;
   },
-  is(number: string, role: 'sudo' | 'mod'): boolean {
+  is(number: string, role: Role): boolean {
     return Boolean(store.get(`${role}:${number}`));
   },
-  list(role: 'sudo' | 'mod'): string[] {
+  list(role: Role): string[] {
     return store
       .all()
       .filter((e) => e.role === role)

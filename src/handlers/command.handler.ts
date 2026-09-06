@@ -7,6 +7,7 @@ import { checkCooldown } from '../middleware/cooldown';
 import { isBanned } from '../middleware/ban';
 import { isOwner, isSudo, isGroupAdmin } from '../middleware/permission';
 import { settingsRepo } from '../database/repositories/settings.repo';
+import { accessRepo } from '../database/repositories/access.repo';
 import { reply } from '../services/message.service';
 import { getAIReply, isAIConfigured } from '../services/ai.service';
 import { userRepo } from '../database/repositories/user.repo';
@@ -49,8 +50,10 @@ export async function handleCommand(
 
   if (!command) return;
 
-  // ── Middleware: banned users ────────────────────────────────
+  // ── Middleware: banned / ignored users ──────────────────────
   if (isBanned(msg.senderNumber)) return;
+  if (accessRepo.is(msg.senderNumber, 'ignored') && !isOwner(msg.senderNumber))
+    return;
 
   // ── Middleware: private mode (owner/sudo only) ──────────────
   const mode = settingsRepo.get('mode') ?? 'public';
@@ -90,6 +93,13 @@ export async function handleCommand(
     text: args.join(' '),
     prefix,
   };
+
+  // Auto-react to the command when cmdreact is enabled.
+  if (settingsRepo.getBool('cmdreact')) {
+    await sock
+      .sendMessage(msg.chat, { react: { text: '⚡', key: msg.raw.key } })
+      .catch(() => {});
+  }
 
   try {
     await command.run(ctx);

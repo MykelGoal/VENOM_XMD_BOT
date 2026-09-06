@@ -48,6 +48,7 @@ export async function startConnection(): Promise<void> {
     // ── Connected ─────────────────────────────────────────────
     if (connection === 'open') {
       logger.info(`✅ ${env.botName} connected as ${sock.user?.id}`);
+      await sendStartupMessage(sock);
     }
 
     // ── Closed / reconnect logic ──────────────────────────────
@@ -69,6 +70,24 @@ export async function startConnection(): Promise<void> {
       await startConnection();
     }
   });
+}
+
+/** Sends a startup message to the owner when enabled via settings. */
+async function sendStartupMessage(sock: WASocket): Promise<void> {
+  try {
+    // Lazy import to avoid a circular dependency at module load.
+    const { settingsRepo } = await import(
+      '../database/repositories/settings.repo'
+    );
+    if (!settingsRepo.getBool('startupmsg')) return;
+    const owner = env.ownerNumbers[0];
+    if (!owner) return;
+    await sock.sendMessage(`${owner}@s.whatsapp.net`, {
+      text: `🕷️ *${env.botName}* is online!\n⏱️ ${new Date().toLocaleString()}`,
+    });
+  } catch (err) {
+    logger.debug({ err }, 'startup message failed');
+  }
 }
 
 /** Requests an 8-digit pairing code for the configured phone number. */
