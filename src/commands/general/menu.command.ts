@@ -22,6 +22,7 @@ const menu: Command = {
       'textmaker',
       'fun',
       'game',
+      'economy',
       'group',
       'owner',
     ];

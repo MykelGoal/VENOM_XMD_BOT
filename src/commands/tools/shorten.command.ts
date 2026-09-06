@@ -6,7 +6,7 @@ import { isUrl } from '../../utils/helpers';
 /** is.gd — free, no key URL shortener. */
 const shorten: Command = {
   name: 'shorten',
-  aliases: ['short', 'tinyurl'],
+  aliases: ['short'],
   category: 'tools',
   description: 'Shorten a long URL.',
   usage: 'shorten <url>',

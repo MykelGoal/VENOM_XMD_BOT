@@ -3,7 +3,7 @@ import { reply } from '../../services/message.service';
 
 const coinflip: Command = {
   name: 'coinflip',
-  aliases: ['flip', 'coin'],
+  aliases: ['flipcoin'],
   category: 'fun',
   description: 'Flip a coin.',
   usage: 'coinflip',

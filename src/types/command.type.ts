@@ -10,6 +10,7 @@ export type CommandCategory =
   | 'tools'
   | 'fun'
   | 'game'
+  | 'economy'
   | 'image'
   | 'textmaker'
   | 'search'

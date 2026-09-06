@@ -5,7 +5,7 @@ import { fetchJson } from '../../services/media.service';
 /** pokeapi.co — free, no key. */
 const pokemon: Command = {
   name: 'pokemon',
-  aliases: ['poke', 'dex'],
+  aliases: ['dex'],
   category: 'fun',
   description: 'Look up a Pokémon by name or number.',
   usage: 'pokemon <name|id>',
