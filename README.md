@@ -14,7 +14,7 @@ Clean architecture · auto-loading commands · middleware pipeline · AI · stic
 
 - ⚡ **Dual login** — QR code *or* 8-digit pairing code
 - 🔁 **Auto-reconnect** on disconnect (survives drops)
-- 🧩 **276 auto-loading commands** — add a file, it just works
+- 🧩 **280 auto-loading commands** — add a file, it just works
 - 🛡️ **Middleware** — cooldown, owner/admin permissions, ban list, anti-link
 - 🤖 **AI built in** — `.ai`, `.translate` (OpenAI / Groq / OpenRouter / **Gemini**)
 - 🔌 **20+ free-API commands** — weather, wiki, github, memes, and more (no keys)
@@ -83,7 +83,7 @@ phone number** and enter the code shown.
 
 ---
 
-## 💬 Commands (276 built in)
+## 💬 Commands (280 built in)
 
 ### General
 | Command | Description |
@@ -155,6 +155,16 @@ phone number** and enter the code shown.
 | `.neko` / `.kitsune` / `.catgirl` | Random neko / foxgirl / catgirl image |
 
 _Plus 52 reaction-GIF commands (`.hug`, `.slap`, `.pat`, …) under the **Fun** category._
+
+### Image
+| Command | Description |
+|---------|-------------|
+| `.wallpaper <query>` | Search & send HD wallpapers |
+| `.pinterest <query> [n]` | Search Pinterest images |
+| `.carbon <code>` | Turn code into a carbon-style image |
+| `.exif` | Read metadata of a replied image |
+| `.blur` `.sepia` `.invert` `.pixelate` … | 15+ image filters (reply to an image) |
+| `.wasted` `.jail` `.triggered` `.glass` … | Meme/canvas overlays |
 
 ### Group (admin)
 | Command | Description |
