@@ -25,6 +25,8 @@ const menu: Command = {
       'game',
       'economy',
       'group',
+      'bot',
+      'config',
       'owner',
     ];
 

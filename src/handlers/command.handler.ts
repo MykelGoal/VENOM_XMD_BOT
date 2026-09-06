@@ -5,7 +5,8 @@ import type { CommandContext } from '../types/command.type';
 import { commands, loadCommands } from '../commands';
 import { checkCooldown } from '../middleware/cooldown';
 import { isBanned } from '../middleware/ban';
-import { isOwner, isGroupAdmin } from '../middleware/permission';
+import { isOwner, isSudo, isGroupAdmin } from '../middleware/permission';
+import { settingsRepo } from '../database/repositories/settings.repo';
 import { reply } from '../services/message.service';
 import { getAIReply, isAIConfigured } from '../services/ai.service';
 import { userRepo } from '../database/repositories/user.repo';
@@ -51,8 +52,12 @@ export async function handleCommand(
   // ── Middleware: banned users ────────────────────────────────
   if (isBanned(msg.senderNumber)) return;
 
+  // ── Middleware: private mode (owner/sudo only) ──────────────
+  const mode = settingsRepo.get('mode') ?? 'public';
+  if (mode === 'private' && !isSudo(msg.senderNumber)) return;
+
   // ── Middleware: permissions ─────────────────────────────────
-  if (command.ownerOnly && !isOwner(msg.senderNumber)) {
+  if (command.ownerOnly && !isSudo(msg.senderNumber)) {
     await reply(sock, msg, '🚫 This command is for the bot owner only.');
     return;
   }

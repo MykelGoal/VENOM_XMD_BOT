@@ -11,6 +11,8 @@ export type CommandCategory =
   | 'fun'
   | 'game'
   | 'economy'
+  | 'config'
+  | 'bot'
   | 'image'
   | 'textmaker'
   | 'converter'

@@ -7,41 +7,60 @@ import { logger } from '../utils/logger';
 
 // Matches http(s) links and common invite links.
 const LINK_REGEX = /(https?:\/\/|www\.|chat\.whatsapp\.com\/)/i;
+/** Treat 5+ mentions in one message as mass-tagging. */
+const MASS_TAG_THRESHOLD = 5;
 
 /**
- * Enforces anti-link in groups where it's enabled. If a non-admin posts
- * a link, the message is deleted and the sender removed (when the bot is
- * an admin). Returns true if the message was handled (blocked).
+ * Group content guard: enforces anti-link, anti-tag and anti-word for
+ * groups that enable them. Non-admins only; the bot must be admin to
+ * delete/remove. Returns true if the message was handled (blocked).
  */
 export async function enforceAntilink(
   sock: WASocket,
   msg: SerializedMessage,
 ): Promise<boolean> {
   if (!msg.isGroup) return false;
-  if (!LINK_REGEX.test(msg.body)) return false;
 
   const settings = groupRepo.get(msg.chat);
-  if (!settings?.antilink) return false;
+  if (!settings) return false;
+
+  const hasLink = settings.antilink && LINK_REGEX.test(msg.body);
+  const massTag =
+    settings.antitag && msg.mentions.length >= MASS_TAG_THRESHOLD;
+  const badWord =
+    settings.antiword &&
+    settings.bannedWords.some((w) =>
+      msg.body.toLowerCase().includes(w),
+    );
+
+  if (!hasLink && !massTag && !badWord) return false;
 
   // Admins and the bot itself are exempt.
   if (await isGroupAdmin(sock, msg.chat, msg.sender)) return false;
   if (!(await isBotAdmin(sock, msg.chat))) return false;
 
+  const reason = hasLink
+    ? 'links are not allowed'
+    : massTag
+      ? 'mass-tagging is not allowed'
+      : 'banned words are not allowed';
+
   try {
-    // Delete the offending message.
     await sock.sendMessage(msg.chat, { delete: msg.raw.key });
-    // Warn + remove the sender.
     await sock.sendMessage(msg.chat, {
-      text: `🚫 @${msg.senderNumber} links are not allowed here.`,
+      text: `🚫 @${msg.senderNumber} ${reason} here.`,
       mentions: [numberToJid(msg.senderNumber)],
     });
-    await sock.groupParticipantsUpdate(
-      msg.chat,
-      [numberToJid(msg.senderNumber)],
-      'remove',
-    );
+    // Anti-link removes the sender; the softer guards just delete + warn.
+    if (hasLink) {
+      await sock.groupParticipantsUpdate(
+        msg.chat,
+        [numberToJid(msg.senderNumber)],
+        'remove',
+      );
+    }
   } catch (err) {
-    logger.error({ err }, 'Anti-link enforcement failed');
+    logger.error({ err }, 'Group guard enforcement failed');
   }
   return true;
 }
