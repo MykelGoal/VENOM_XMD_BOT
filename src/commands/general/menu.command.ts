@@ -1,8 +1,30 @@
+import fs from 'fs';
+import path from 'path';
 import type { Command } from '../../types/command.type';
 import { commandsByCategory } from '../index';
-import { reply } from '../../services/message.service';
+import { reply, sendReplyContent } from '../../services/message.service';
 import { env, META } from '../../config';
 import { formatUptime } from '../../utils/helpers';
+
+/**
+ * Resolve the menu banner image. Prefers the bundled assets/logo.png (works
+ * fully offline), otherwise falls back to the configured MENU_IMAGE_URL so the
+ * banner still shows on hosts that didn't ship the asset.
+ */
+function resolveMenuImage(): Buffer | { url: string } | null {
+  const candidates = [
+    path.join(process.cwd(), 'assets', 'logo.png'),
+    path.resolve(__dirname, '../../../assets/logo.png'),
+  ];
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) return fs.readFileSync(p);
+    } catch {
+      /* ignore and try next */
+    }
+  }
+  return env.menuImage ? { url: env.menuImage } : null;
+}
 
 const menu: Command = {
   name: 'menu',
@@ -53,7 +75,21 @@ const menu: Command = {
       sections.push('*╰────────────*', '');
     }
 
-    await reply(sock, msg, [...header, ...sections].join('\n').trim());
+    const caption = [...header, ...sections].join('\n').trim();
+
+    // Send the banner image with the full menu as its caption so pressing
+    // .menu shows the VENOM-XMD logo and command list together.
+    const image = resolveMenuImage();
+    if (image) {
+      try {
+        await sendReplyContent(sock, msg, { image, caption });
+        return;
+      } catch {
+        /* fall back to text-only if the image fails to send */
+      }
+    }
+
+    await reply(sock, msg, caption);
   },
 };
 

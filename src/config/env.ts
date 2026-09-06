@@ -40,6 +40,14 @@ export const env = {
   logLevel: optional('LOG_LEVEL', 'info'),
   cooldownMs: parseInt(optional('COOLDOWN_MS', '3000'), 10),
 
+  // Menu banner image shown at the top of the .menu command.
+  // Local assets/logo.png is used automatically when present; this URL is the
+  // fallback (and lets deployers swap in their own banner without a rebuild).
+  menuImage: optional(
+    'MENU_IMAGE_URL',
+    'https://raw.githubusercontent.com/MykelGoal/VENOM_XMD_BOT/main/assets/logo.png',
+  ),
+
   // Pre-authenticated session (paste from the VENOM session site)
   session: {
     id: optional('SESSION_ID', ''),
