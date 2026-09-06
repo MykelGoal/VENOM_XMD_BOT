@@ -3,11 +3,19 @@ import { env } from '../config';
 import { logger } from '../utils/logger';
 
 /**
- * AI reply service. Two providers supported:
- *   - "openai"  → any OpenAI-compatible chat API (OpenAI, Groq, OpenRouter…)
- *   - "gemini"  → Google Gemini (generativelanguage API)
+ * Multi-provider AI reply service with automatic fallback.
  *
- * Pick one with AI_PROVIDER in .env and set the matching key.
+ * Supported providers (add a key for ANY of them, in env vars — never in code):
+ *   - deepseek    → DeepSeek         (OpenAI-compatible)
+ *   - gemini      → Google Gemini
+ *   - openrouter  → OpenRouter       (OpenAI-compatible, has free models)
+ *   - groq        → Groq             (OpenAI-compatible, fast, free tier)
+ *   - openai      → OpenAI / any OpenAI-compatible endpoint (AI_BASE_URL)
+ *
+ * The bot tries providers in the order set by AI_ORDER and returns the first
+ * successful answer. If a provider is down / rate-limited / missing a key, it
+ * automatically falls through to the next one. This is why we combine them:
+ * resilience and free-tier coverage.
  */
 
 export interface AIReplyOptions {
@@ -19,36 +27,142 @@ const DEFAULT_SYSTEM =
   `You are ${env.botName}, a helpful, witty WhatsApp assistant. ` +
   'Keep replies concise and friendly. Use emojis sparingly.';
 
+/** Provider config: which have keys, and how to call them. */
+interface ProviderCfg {
+  name: string;
+  hasKey: () => boolean;
+  call: (opts: AIReplyOptions) => Promise<string>;
+}
+
+const PROVIDERS: Record<string, ProviderCfg> = {
+  deepseek: {
+    name: 'deepseek',
+    hasKey: () => Boolean(env.ai.deepseek.apiKey),
+    call: (o) =>
+      openAICompatible(o, {
+        apiKey: env.ai.deepseek.apiKey,
+        model: env.ai.deepseek.model,
+        baseUrl: env.ai.deepseek.baseUrl,
+      }),
+  },
+  openrouter: {
+    name: 'openrouter',
+    hasKey: () => Boolean(env.ai.openrouter.apiKey),
+    call: (o) =>
+      openAICompatible(o, {
+        apiKey: env.ai.openrouter.apiKey,
+        model: env.ai.openrouter.model,
+        baseUrl: env.ai.openrouter.baseUrl,
+        extraHeaders: {
+          'HTTP-Referer': 'https://github.com/MykelGoal/VENOM_XMD_BOT',
+          'X-Title': env.botName,
+        },
+      }),
+  },
+  groq: {
+    name: 'groq',
+    hasKey: () => Boolean(env.ai.groq.apiKey),
+    call: (o) =>
+      openAICompatible(o, {
+        apiKey: env.ai.groq.apiKey,
+        model: env.ai.groq.model,
+        baseUrl: env.ai.groq.baseUrl,
+      }),
+  },
+  openai: {
+    name: 'openai',
+    hasKey: () => Boolean(env.ai.apiKey),
+    call: (o) =>
+      openAICompatible(o, {
+        apiKey: env.ai.apiKey,
+        model: env.ai.model,
+        baseUrl: env.ai.baseUrl,
+      }),
+  },
+  gemini: {
+    name: 'gemini',
+    hasKey: () => Boolean(env.ai.gemini.apiKey),
+    call: (o) => geminiReply(o),
+  },
+};
+
+/** Ordered list of providers that actually have a key configured. */
+function activeProviders(): ProviderCfg[] {
+  // Start from AI_ORDER, then append any not listed, then keep only keyed ones.
+  const order = [...env.ai.order];
+  for (const name of Object.keys(PROVIDERS)) {
+    if (!order.includes(name)) order.push(name);
+  }
+  // Honour AI_PROVIDER as a top preference if set and keyed.
+  if (env.ai.provider && order.includes(env.ai.provider)) {
+    order.sort((a, b) =>
+      a === env.ai.provider ? -1 : b === env.ai.provider ? 1 : 0,
+    );
+  }
+  return order
+    .map((n) => PROVIDERS[n])
+    .filter((p): p is ProviderCfg => Boolean(p) && p.hasKey());
+}
+
 export function isAIConfigured(): boolean {
-  if (env.ai.provider === 'gemini') return Boolean(env.ai.gemini.apiKey);
-  return Boolean(env.ai.apiKey);
+  return activeProviders().length > 0;
+}
+
+/** List configured provider names (for status/diagnostics commands). */
+export function configuredProviders(): string[] {
+  return activeProviders().map((p) => p.name);
 }
 
 export async function getAIReply(opts: AIReplyOptions): Promise<string> {
-  if (!isAIConfigured()) {
-    const key =
-      env.ai.provider === 'gemini' ? 'GEMINI_API_KEY' : 'AI_API_KEY';
-    return `🤖 AI is not configured. Add ${key} to your .env file.`;
+  const providers = activeProviders();
+  if (providers.length === 0) {
+    return (
+      '🤖 AI is not configured yet.\n\n' +
+      'Add ONE (or more) of these keys to your environment:\n' +
+      '• DEEPSEEK_API_KEY\n• GEMINI_API_KEY\n• OPENROUTER_API_KEY\n' +
+      '• GROQ_API_KEY\n• AI_API_KEY (OpenAI-compatible)\n\n' +
+      '_Set them in your host dashboard / .env — never in the code._'
+    );
   }
 
-  try {
-    return env.ai.provider === 'gemini'
-      ? await geminiReply(opts)
-      : await openAIReply(opts);
-  } catch (err) {
-    const detail = axios.isAxiosError(err)
-      ? `${err.response?.status ?? ''} ${JSON.stringify(err.response?.data ?? err.message)}`
-      : String(err);
-    logger.error({ detail }, 'AI request failed');
-    return '⚠️ AI request failed. Check your API key, model, and base URL.';
+  const errors: string[] = [];
+  for (const provider of providers) {
+    try {
+      const answer = await provider.call(opts);
+      if (answer && answer.trim()) return answer.trim();
+      errors.push(`${provider.name}: empty response`);
+    } catch (err) {
+      const detail = axios.isAxiosError(err)
+        ? `${err.response?.status ?? ''} ${
+            typeof err.response?.data === 'object'
+              ? JSON.stringify(err.response?.data).slice(0, 200)
+              : err.message
+          }`
+        : String(err);
+      logger.warn(`AI provider "${provider.name}" failed → ${detail}`);
+      errors.push(`${provider.name}: ${detail}`);
+      // fall through to the next provider
+    }
   }
+
+  logger.error({ errors }, 'All AI providers failed');
+  return '⚠️ All AI providers are unavailable right now. Please try again later.';
 }
 
-async function openAIReply(opts: AIReplyOptions): Promise<string> {
+/** Call any OpenAI-compatible /chat/completions endpoint. */
+async function openAICompatible(
+  opts: AIReplyOptions,
+  cfg: {
+    apiKey: string;
+    model: string;
+    baseUrl: string;
+    extraHeaders?: Record<string, string>;
+  },
+): Promise<string> {
   const { data } = await axios.post(
-    `${env.ai.baseUrl.replace(/\/$/, '')}/chat/completions`,
+    `${cfg.baseUrl.replace(/\/$/, '')}/chat/completions`,
     {
-      model: env.ai.model,
+      model: cfg.model,
       messages: [
         { role: 'system', content: opts.system ?? DEFAULT_SYSTEM },
         { role: 'user', content: opts.prompt },
@@ -58,7 +172,8 @@ async function openAIReply(opts: AIReplyOptions): Promise<string> {
     {
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${env.ai.apiKey}`,
+        Authorization: `Bearer ${cfg.apiKey}`,
+        ...(cfg.extraHeaders ?? {}),
       },
       timeout: 60_000,
     },

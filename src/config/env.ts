@@ -54,13 +54,44 @@ export const env = {
     siteUrl: optional('SESSION_SITE_URL', 'https://session-site-2odn.onrender.com'),
   },
 
-  // AI
+  // AI — multi-provider with automatic fallback.
+  // Add a key for ANY of these (in env vars, never in code!). The bot tries
+  // them in AI_ORDER and uses the first one that answers, so if one is down
+  // or out of quota it automatically falls back to the next.
   ai: {
+    // Preferred primary provider (kept for backward compatibility).
     provider: optional('AI_PROVIDER', 'openai'),
+    autoReply: bool('AI_AUTO_REPLY', false),
+    // Comma-separated fallback order. Only providers with a key are tried.
+    order: optional('AI_ORDER', 'deepseek,gemini,openrouter,groq,openai')
+      .split(',')
+      .map((p) => p.trim().toLowerCase())
+      .filter(Boolean),
+
+    // Generic OpenAI-compatible endpoint (OpenAI itself, or any compatible API)
     apiKey: optional('AI_API_KEY', ''),
     model: optional('AI_MODEL', 'gpt-4o-mini'),
     baseUrl: optional('AI_BASE_URL', 'https://api.openai.com/v1'),
-    autoReply: bool('AI_AUTO_REPLY', false),
+
+    // DeepSeek (OpenAI-compatible)
+    deepseek: {
+      apiKey: optional('DEEPSEEK_API_KEY', ''),
+      model: optional('DEEPSEEK_MODEL', 'deepseek-chat'),
+      baseUrl: optional('DEEPSEEK_BASE_URL', 'https://api.deepseek.com'),
+    },
+    // OpenRouter (OpenAI-compatible; gateway to many models, has free ones)
+    openrouter: {
+      apiKey: optional('OPENROUTER_API_KEY', ''),
+      model: optional('OPENROUTER_MODEL', 'deepseek/deepseek-chat-v3.1:free'),
+      baseUrl: optional('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
+    },
+    // Groq (OpenAI-compatible; very fast, has a free tier)
+    groq: {
+      apiKey: optional('GROQ_API_KEY', ''),
+      model: optional('GROQ_MODEL', 'llama-3.3-70b-versatile'),
+      baseUrl: optional('GROQ_BASE_URL', 'https://api.groq.com/openai/v1'),
+    },
+    // Google Gemini
     gemini: {
       apiKey: optional('GEMINI_API_KEY', ''),
       model: optional('GEMINI_MODEL', 'gemini-1.5-flash'),
