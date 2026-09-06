@@ -18,6 +18,7 @@ export type CommandCategory =
   | 'textmaker'
   | 'converter'
   | 'search'
+  | 'downloader'
   | 'owner';
 
 /** Context object passed into every command's run() method. */

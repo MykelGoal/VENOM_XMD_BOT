@@ -14,7 +14,7 @@ Clean architecture · auto-loading commands · middleware pipeline · AI · stic
 
 - ⚡ **Dual login** — QR code *or* 8-digit pairing code
 - 🔁 **Auto-reconnect** on disconnect (survives drops)
-- 🧩 **260 auto-loading commands** — add a file, it just works
+- 🧩 **267 auto-loading commands** — add a file, it just works
 - 🛡️ **Middleware** — cooldown, owner/admin permissions, ban list, anti-link
 - 🤖 **AI built in** — `.ai`, `.translate` (OpenAI / Groq / OpenRouter / **Gemini**)
 - 🔌 **20+ free-API commands** — weather, wiki, github, memes, and more (no keys)
@@ -83,7 +83,7 @@ phone number** and enter the code shown.
 
 ---
 
-## 💬 Commands (260 built in)
+## 💬 Commands (267 built in)
 
 ### General
 | Command | Description |
@@ -130,8 +130,19 @@ phone number** and enter the code shown.
 | `.sticker` | Image/video → sticker |
 | `.toimg` | Sticker → image |
 | `.download <url>` | Download a direct media URL |
-| `.tiktok <url>` | Download TikTok (no watermark) |
-| `.play <name>` | Search YouTube |
+
+### Downloader *(free public endpoints — no key)*
+| Command | Description |
+|---------|-------------|
+| `.play <name>` | Search YouTube → send audio (MP3) |
+| `.video <name>` | Search YouTube → send video (MP4) |
+| `.ytsearch <query>` | List YouTube results (no download) |
+| `.tiktok <url>` | TikTok video, no watermark |
+| `.tiktokaudio <url>` | Extract TikTok audio |
+| `.facebook <url>` | Facebook video (HD when available) |
+| `.spotify <url>` | Download a Spotify track |
+| `.apk <app>` | Search & download an Android APK |
+| `.lyrics <song>` | Fetch song lyrics |
 
 ### Group (admin)
 | Command | Description |

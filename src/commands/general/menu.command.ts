@@ -17,6 +17,7 @@ const menu: Command = {
       'ai',
       'tools',
       'search',
+      'downloader',
       'media',
       'converter',
       'image',
