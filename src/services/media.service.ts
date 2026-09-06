@@ -93,6 +93,37 @@ export async function gifToMp4(gif: Buffer): Promise<Buffer> {
   return out;
 }
 
+/** Apply an ffmpeg audio filter chain to an audio buffer → mp3 buffer. */
+export async function applyAudioFilter(
+  input: Buffer,
+  filter: string,
+): Promise<Buffer> {
+  const tmp = os.tmpdir();
+  const id = Math.random().toString(36).slice(2);
+  const inPath = path.join(tmp, `${id}.in`);
+  const outPath = path.join(tmp, `${id}.mp3`);
+  await fs.promises.writeFile(inPath, input);
+
+  await new Promise<void>((resolve, reject) => {
+    ffmpeg(inPath)
+      .audioFilters(filter)
+      .toFormat('mp3')
+      .on('end', () => resolve())
+      .on('error', reject)
+      .save(outPath);
+  });
+
+  const out = await fs.promises.readFile(outPath);
+  fs.promises.unlink(inPath).catch(() => {});
+  fs.promises.unlink(outPath).catch(() => {});
+  return out;
+}
+
+/** Convert any audio/video buffer to mp3. */
+export async function toMp3(input: Buffer): Promise<Buffer> {
+  return applyAudioFilter(input, 'volume=1.0');
+}
+
 /** Available image filters powered by sharp. */
 export type ImageFilter =
   | 'greyscale'

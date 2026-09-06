@@ -18,6 +18,7 @@ const menu: Command = {
       'tools',
       'search',
       'media',
+      'converter',
       'image',
       'textmaker',
       'fun',

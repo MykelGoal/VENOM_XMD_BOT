@@ -13,6 +13,7 @@ export type CommandCategory =
   | 'economy'
   | 'image'
   | 'textmaker'
+  | 'converter'
   | 'search'
   | 'owner';
 

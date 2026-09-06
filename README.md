@@ -14,7 +14,7 @@ Clean architecture · auto-loading commands · middleware pipeline · AI · stic
 
 - ⚡ **Dual login** — QR code *or* 8-digit pairing code
 - 🔁 **Auto-reconnect** on disconnect (survives drops)
-- 🧩 **182 auto-loading commands** — add a file, it just works
+- 🧩 **210 auto-loading commands** — add a file, it just works
 - 🛡️ **Middleware** — cooldown, owner/admin permissions, ban list, anti-link
 - 🤖 **AI built in** — `.ai`, `.translate` (OpenAI / Groq / OpenRouter / **Gemini**)
 - 🔌 **20+ free-API commands** — weather, wiki, github, memes, and more (no keys)
@@ -83,7 +83,7 @@ phone number** and enter the code shown.
 
 ---
 
-## 💬 Commands (182 built in)
+## 💬 Commands (210 built in)
 
 ### General
 | Command | Description |

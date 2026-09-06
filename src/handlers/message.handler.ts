@@ -3,6 +3,7 @@ import type { proto } from '@whiskeysockets/baileys';
 import { serializeMessage } from '../utils/serialize';
 import { handleCommand } from './command.handler';
 import { enforceAntilink } from '../middleware/antilink';
+import { handleAfk } from './afk.handler';
 import { userRepo } from '../database/repositories/user.repo';
 
 interface Upsert {
@@ -37,6 +38,9 @@ export async function handleMessageUpsert(
 
     // Passive: anti-link enforcement. If it blocked, stop here.
     if (await enforceAntilink(sock, msg)) continue;
+
+    // Passive: AFK notifications / auto-return.
+    await handleAfk(sock, msg);
 
     await handleCommand(sock, msg);
   }
