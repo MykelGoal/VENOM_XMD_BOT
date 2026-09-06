@@ -43,13 +43,22 @@ export async function handleMessageUpsert(
       });
     }
 
-    // The bot's own messages. When self-mode is ON, still let *commands*
-    // (messages starting with the prefix) through so you can control the bot
-    // from your own number without a second phone. Normal replies the bot
-    // sends don't start with the prefix, so there's no reply loop.
+    // The bot's own messages. Self-mode lets you control the bot from your
+    // OWN number (no second phone). It defaults to ON, and the selfmode
+    // toggle command itself ALWAYS works from your own number — so you can
+    // never lock yourself out. The bot's own replies don't start with the
+    // prefix, so there's no reply loop.
     if (msg.fromMe) {
-      if (settingsRepo.getBool('selfmode') && msg.body.startsWith(env.prefix)) {
-        await handleCommand(sock, msg);
+      if (msg.body.startsWith(env.prefix)) {
+        const cmdName = msg.body
+          .slice(env.prefix.length)
+          .trim()
+          .split(/\s+/)[0]
+          ?.toLowerCase();
+        const isSelfToggle = ['selfmode', 'self', 'selfbot'].includes(cmdName);
+        if (isSelfToggle || settingsRepo.getBool('selfmode', true)) {
+          await handleCommand(sock, msg);
+        }
       }
       continue;
     }
