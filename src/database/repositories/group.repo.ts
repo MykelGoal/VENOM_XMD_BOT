@@ -14,6 +14,7 @@ function defaults(jid: string): GroupModel {
     antibot: false,
     antiword: false,
     bannedWords: [],
+    mutedUsers: [],
     createdAt: Date.now(),
   };
 }
@@ -61,5 +62,21 @@ export const groupRepo = {
     const g = this.ensure(jid);
     g.bannedWords = g.bannedWords.filter((w) => w !== word.toLowerCase());
     groups.set(jid, g);
+  },
+
+  muteUser(jid: string, number: string): void {
+    const g = this.ensure(jid);
+    if (!g.mutedUsers.includes(number)) {
+      g.mutedUsers.push(number);
+      groups.set(jid, g);
+    }
+  },
+  unmuteUser(jid: string, number: string): void {
+    const g = this.ensure(jid);
+    g.mutedUsers = g.mutedUsers.filter((n) => n !== number);
+    groups.set(jid, g);
+  },
+  isUserMuted(jid: string, number: string): boolean {
+    return this.get(jid)?.mutedUsers.includes(number) ?? false;
   },
 };

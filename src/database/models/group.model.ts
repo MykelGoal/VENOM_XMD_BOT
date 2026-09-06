@@ -8,5 +8,6 @@ export interface GroupModel extends Record<string, unknown> {
   antibot: boolean;
   antiword: boolean;
   bannedWords: string[];
+  mutedUsers: string[];
   createdAt: number;
 }

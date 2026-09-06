@@ -13,6 +13,7 @@ export type CommandCategory =
   | 'economy'
   | 'config'
   | 'bot'
+  | 'user'
   | 'image'
   | 'textmaker'
   | 'converter'

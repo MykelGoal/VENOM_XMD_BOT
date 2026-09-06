@@ -27,6 +27,7 @@ const menu: Command = {
       'group',
       'bot',
       'config',
+      'user',
       'owner',
     ];
 

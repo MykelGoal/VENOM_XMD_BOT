@@ -24,6 +24,18 @@ export async function enforceAntilink(
   const settings = groupRepo.get(msg.chat);
   if (!settings) return false;
 
+  // Muted-user enforcement: delete their messages (bot must be admin).
+  if (settings.mutedUsers.includes(msg.senderNumber)) {
+    if (await isBotAdmin(sock, msg.chat)) {
+      try {
+        await sock.sendMessage(msg.chat, { delete: msg.raw.key });
+      } catch (err) {
+        logger.error({ err }, 'Failed to delete muted user message');
+      }
+      return true;
+    }
+  }
+
   const hasLink = settings.antilink && LINK_REGEX.test(msg.body);
   const massTag =
     settings.antitag && msg.mentions.length >= MASS_TAG_THRESHOLD;

@@ -31,15 +31,48 @@ export async function downloadMedia(
 
 /**
  * Convert an image/video buffer into a WhatsApp sticker (webp).
+ * Optional pack/author override the configured defaults.
  */
-export async function makeSticker(input: Buffer): Promise<Buffer> {
+export async function makeSticker(
+  input: Buffer,
+  opts?: { pack?: string; author?: string; type?: StickerTypes },
+): Promise<Buffer> {
   const sticker = new Sticker(input, {
-    pack: env.sticker.pack,
-    author: env.sticker.author,
-    type: StickerTypes.FULL,
+    pack: opts?.pack ?? env.sticker.pack,
+    author: opts?.author ?? env.sticker.author,
+    type: opts?.type ?? StickerTypes.FULL,
     quality: 60,
   });
   return sticker.toBuffer();
+}
+
+/** Make a circular-cropped sticker from an image. */
+export async function makeCircleSticker(input: Buffer): Promise<Buffer> {
+  const size = 512;
+  const circle = Buffer.from(
+    `<svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}" fill="#fff"/></svg>`,
+  );
+  const png = await sharp(input)
+    .resize(size, size, { fit: 'cover' })
+    .composite([{ input: circle, blend: 'dest-in' }])
+    .png()
+    .toBuffer();
+  return makeSticker(png, { type: StickerTypes.FULL });
+}
+
+/** Make a rounded-corner sticker from an image. */
+export async function makeRoundedSticker(input: Buffer): Promise<Buffer> {
+  const size = 512;
+  const r = 80;
+  const mask = Buffer.from(
+    `<svg width="${size}" height="${size}"><rect width="${size}" height="${size}" rx="${r}" ry="${r}" fill="#fff"/></svg>`,
+  );
+  const png = await sharp(input)
+    .resize(size, size, { fit: 'cover' })
+    .composite([{ input: mask, blend: 'dest-in' }])
+    .png()
+    .toBuffer();
+  return makeSticker(png, { type: StickerTypes.FULL });
 }
 
 /** Fetch any URL into a Buffer (used by the downloader/media commands). */
@@ -198,6 +231,15 @@ export async function applyImageFilter(
   }
 
   return img.png().toBuffer();
+}
+
+/** Compress an image: resize down and drop JPEG quality. */
+export async function compressImage(input: Buffer): Promise<Buffer> {
+  return sharp(input)
+    .rotate()
+    .resize(1280, 1280, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 55, mozjpeg: true })
+    .toBuffer();
 }
 
 /** Overlay one image (e.g. a meme sticker) at full size over another. */
