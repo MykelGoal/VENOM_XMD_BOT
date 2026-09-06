@@ -1,5 +1,6 @@
 import type { WASocket } from '@whiskeysockets/baileys';
 import type { proto } from '@whiskeysockets/baileys';
+import { env } from '../config';
 import { serializeMessage } from '../utils/serialize';
 import { handleCommand } from './command.handler';
 import { enforceAntilink } from '../middleware/antilink';
@@ -42,8 +43,16 @@ export async function handleMessageUpsert(
       });
     }
 
-    // Ignore the bot's own messages (flip if you want self-commands).
-    if (msg.fromMe) continue;
+    // The bot's own messages. When self-mode is ON, still let *commands*
+    // (messages starting with the prefix) through so you can control the bot
+    // from your own number without a second phone. Normal replies the bot
+    // sends don't start with the prefix, so there's no reply loop.
+    if (msg.fromMe) {
+      if (settingsRepo.getBool('selfmode') && msg.body.startsWith(env.prefix)) {
+        await handleCommand(sock, msg);
+      }
+      continue;
+    }
 
     // Track the user (first-seen, counts).
     userRepo.ensure(msg.senderNumber, raw.pushName ?? undefined);
