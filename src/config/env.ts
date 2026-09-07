@@ -94,7 +94,10 @@ export const env = {
     // Google Gemini
     gemini: {
       apiKey: optional('GEMINI_API_KEY', ''),
-      model: optional('GEMINI_MODEL', 'gemini-1.5-flash'),
+      // 'gemini-flash-latest' auto-tracks the newest Flash model — Google
+      // retires specific versions (e.g. gemini-1.5-flash is gone), so the
+      // alias keeps working without code changes.
+      model: optional('GEMINI_MODEL', 'gemini-flash-latest'),
     },
   },
 

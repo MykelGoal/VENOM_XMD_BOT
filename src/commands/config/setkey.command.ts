@@ -22,12 +22,13 @@ import { env } from '../../config';
  */
 
 /** Usual key prefixes — soft warnings only, never hard rejections. */
-const KEY_PREFIX: Record<string, string> = {
-  gemini: 'AIza',
-  deepseek: 'sk-',
-  openrouter: 'sk-or-',
-  groq: 'gsk_',
-  openai: 'sk-',
+const KEY_PREFIX: Record<string, string[]> = {
+  // Google issues both classic AIza... and new AQ.... format keys.
+  gemini: ['AIza', 'AQ.'],
+  deepseek: ['sk-'],
+  openrouter: ['sk-or-'],
+  groq: ['gsk_'],
+  openai: ['sk-'],
 };
 
 const HELP = [
@@ -145,8 +146,8 @@ const setkey: Command = {
 
     const expected = KEY_PREFIX[provider];
     const prefixWarn =
-      expected && !key.startsWith(expected)
-        ? `\n⚠️ Heads-up: ${provider} keys usually start with *${expected}* — double-check it.`
+      expected && !expected.some((p) => key.startsWith(p))
+        ? `\n⚠️ Heads-up: ${provider} keys usually start with *${expected.join('* or *')}* — double-check it.`
         : '';
 
     setRuntimeAIKey(provider, key);
