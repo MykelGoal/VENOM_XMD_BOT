@@ -29,8 +29,7 @@ const aistatus: Command = {
       '',
       `🔁 Fallback order: ${env.ai.order.join(', ')}`,
       '',
-      '_Add keys in your host dashboard / .env (never in code):_',
-      '_DEEPSEEK_API_KEY · GEMINI_API_KEY · OPENROUTER_API_KEY · GROQ_API_KEY · AI_API_KEY_',
+      '_Add keys instantly with_ `.setkey <provider> <key>` _or in your host dashboard / .env_',
     ];
 
     await reply(sock, msg, lines.join('\n'));

@@ -4,7 +4,6 @@ import { settingsRepo } from '../../database/repositories/settings.repo';
 
 const setvar: Command = {
   name: 'setvar',
-  aliases: ['setkey'],
   category: 'config',
   description: 'Set a global config variable.',
   usage: 'setvar <key> <value>',

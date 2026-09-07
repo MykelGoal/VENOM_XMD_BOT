@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { env } from '../config';
 import { logger } from '../utils/logger';
+import { settingsRepo } from '../database/repositories/settings.repo';
 
 /**
  * Multi-provider AI reply service with automatic fallback.
@@ -27,6 +28,57 @@ const DEFAULT_SYSTEM =
   `You are ${env.botName}, a helpful, witty WhatsApp assistant. ` +
   'Keep replies concise and friendly. Use emojis sparingly.';
 
+/* ─── Runtime key layer (.setkey) ────────────────────────────────────────
+ * Keys set via the .setkey owner command are persisted in the settings
+ * store and ALWAYS win over env variables — so owners can add/replace
+ * keys from WhatsApp without touching the host dashboard or redeploying.
+ */
+
+export const AI_PROVIDER_NAMES: readonly string[] = [
+  'deepseek',
+  'gemini',
+  'openrouter',
+  'groq',
+  'openai',
+];
+
+/** Env-variable key for each provider (fallback when no runtime key). */
+const ENV_KEYS: Record<string, () => string> = {
+  deepseek: () => env.ai.deepseek.apiKey,
+  gemini: () => env.ai.gemini.apiKey,
+  openrouter: () => env.ai.openrouter.apiKey,
+  groq: () => env.ai.groq.apiKey,
+  openai: () => env.ai.apiKey,
+};
+
+const runtimeKeyVar = (provider: string) => `ai.key.${provider.toLowerCase()}`;
+
+/** Key set at runtime via .setkey, if any. */
+export function getRuntimeAIKey(provider: string): string | undefined {
+  return settingsRepo.get(runtimeKeyVar(provider));
+}
+
+/** Persist a runtime key (takes effect immediately). */
+export function setRuntimeAIKey(provider: string, key: string): void {
+  settingsRepo.set(runtimeKeyVar(provider), key);
+}
+
+/** Remove a runtime key. Returns true if one was stored. */
+export function removeRuntimeAIKey(provider: string): boolean {
+  return settingsRepo.delete(runtimeKeyVar(provider));
+}
+
+/** Runtime key if set, otherwise the env-variable key. */
+function effectiveAIKey(provider: string): string {
+  return getRuntimeAIKey(provider) || ENV_KEYS[provider]?.() || '';
+}
+
+/** Mask a key for display: AIzaSy••••••8f2q */
+export function maskKey(key: string): string {
+  if (key.length <= 10) return `${key.slice(0, 2)}••••••`;
+  return `${key.slice(0, 6)}••••••${key.slice(-4)}`;
+}
+
 /** Provider config: which have keys, and how to call them. */
 interface ProviderCfg {
   name: string;
@@ -37,20 +89,20 @@ interface ProviderCfg {
 const PROVIDERS: Record<string, ProviderCfg> = {
   deepseek: {
     name: 'deepseek',
-    hasKey: () => Boolean(env.ai.deepseek.apiKey),
+    hasKey: () => Boolean(effectiveAIKey('deepseek')),
     call: (o) =>
       openAICompatible(o, {
-        apiKey: env.ai.deepseek.apiKey,
+        apiKey: effectiveAIKey('deepseek'),
         model: env.ai.deepseek.model,
         baseUrl: env.ai.deepseek.baseUrl,
       }),
   },
   openrouter: {
     name: 'openrouter',
-    hasKey: () => Boolean(env.ai.openrouter.apiKey),
+    hasKey: () => Boolean(effectiveAIKey('openrouter')),
     call: (o) =>
       openAICompatible(o, {
-        apiKey: env.ai.openrouter.apiKey,
+        apiKey: effectiveAIKey('openrouter'),
         model: env.ai.openrouter.model,
         baseUrl: env.ai.openrouter.baseUrl,
         extraHeaders: {
@@ -61,27 +113,27 @@ const PROVIDERS: Record<string, ProviderCfg> = {
   },
   groq: {
     name: 'groq',
-    hasKey: () => Boolean(env.ai.groq.apiKey),
+    hasKey: () => Boolean(effectiveAIKey('groq')),
     call: (o) =>
       openAICompatible(o, {
-        apiKey: env.ai.groq.apiKey,
+        apiKey: effectiveAIKey('groq'),
         model: env.ai.groq.model,
         baseUrl: env.ai.groq.baseUrl,
       }),
   },
   openai: {
     name: 'openai',
-    hasKey: () => Boolean(env.ai.apiKey),
+    hasKey: () => Boolean(effectiveAIKey('openai')),
     call: (o) =>
       openAICompatible(o, {
-        apiKey: env.ai.apiKey,
+        apiKey: effectiveAIKey('openai'),
         model: env.ai.model,
         baseUrl: env.ai.baseUrl,
       }),
   },
   gemini: {
     name: 'gemini',
-    hasKey: () => Boolean(env.ai.gemini.apiKey),
+    hasKey: () => Boolean(effectiveAIKey('gemini')),
     call: (o) => geminiReply(o),
   },
 };
@@ -118,10 +170,11 @@ export async function getAIReply(opts: AIReplyOptions): Promise<string> {
   if (providers.length === 0) {
     return (
       '🤖 AI is not configured yet.\n\n' +
-      'Add ONE (or more) of these keys to your environment:\n' +
+      'Add ONE (or more) of these keys:\n' +
       '• DEEPSEEK_API_KEY\n• GEMINI_API_KEY\n• OPENROUTER_API_KEY\n' +
       '• GROQ_API_KEY\n• AI_API_KEY (OpenAI-compatible)\n\n' +
-      '_Set them in your host dashboard / .env — never in the code._'
+      '_Owner: set one instantly from WhatsApp with_ `.setkey gemini <key>` _— no restart needed. ' +
+      'Or add it in your host dashboard / .env (never in the code)._'
     );
   }
 
@@ -188,7 +241,7 @@ async function geminiReply(opts: AIReplyOptions): Promise<string> {
   const model = env.ai.gemini.model;
   const url =
     `https://generativelanguage.googleapis.com/v1beta/models/` +
-    `${model}:generateContent?key=${env.ai.gemini.apiKey}`;
+    `${model}:generateContent?key=${effectiveAIKey('gemini')}`;
 
   const { data } = await axios.post(
     url,
