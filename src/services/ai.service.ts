@@ -3,7 +3,7 @@ import FormData from 'form-data';
 import { env } from '../config';
 import { logger } from '../utils/logger';
 import { settingsRepo } from '../database/repositories/settings.repo';
-import { VENOM_BRAIN } from './venom-brain';
+import { buildVenomBrain } from './venom-brain';
 
 /**
  * Multi-provider AI reply service with automatic fallback.
@@ -27,7 +27,8 @@ export interface AIReplyOptions {
 }
 
 // The Venom Brain — full identity, knowledge & personality (see venom-brain.ts).
-const DEFAULT_SYSTEM = VENOM_BRAIN;
+// Built at request time so live command counts are always accurate.
+const DEFAULT_SYSTEM = () => buildVenomBrain();
 
 /* ─── Speed tuning ───────────────────────────────────────────────────────
  * A shorter per-provider timeout means a stuck/overloaded provider gives up
@@ -275,7 +276,7 @@ async function openAICompatible(
     {
       model: cfg.model,
       messages: [
-        { role: 'system', content: opts.system ?? DEFAULT_SYSTEM },
+        { role: 'system', content: opts.system ?? DEFAULT_SYSTEM() },
         { role: 'user', content: opts.prompt },
       ],
       temperature: 0.7,
@@ -306,7 +307,7 @@ async function geminiReply(opts: AIReplyOptions): Promise<string> {
     url,
     {
       systemInstruction: {
-        parts: [{ text: opts.system ?? DEFAULT_SYSTEM }],
+        parts: [{ text: opts.system ?? DEFAULT_SYSTEM() }],
       },
       contents: [{ role: 'user', parts: [{ text: opts.prompt }] }],
       generationConfig: { maxOutputTokens: MAX_TOKENS },
