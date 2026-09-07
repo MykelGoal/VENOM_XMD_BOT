@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import axios from 'axios';
+import FormData from 'form-data';
 import { env } from '../config';
 import { waLogger } from '../utils/logger';
 
@@ -281,14 +282,52 @@ export async function sendGifFromUrl(
  * weights are bundled with the package, so the first call may take a few
  * seconds to warm up; subsequent calls are faster.
  */
+/**
+ * Remove the background from an image, returning a transparent PNG buffer.
+ *
+ * Two backends, tried in order:
+ *   1. remove.bg API — if REMOVEBG_API_KEY is set. Works on ANY host (low
+ *      memory), reliable, free tier = 50 images/month. Best for free hosts.
+ *   2. @imgly/background-removal-node — a local ONNX model. No key, works
+ *      offline, but loads a ~127MB model and needs ~1-2GB RAM, so it gets
+ *      OOM-killed on 512MB free hosts. Great on a VPS.
+ *
+ * @throws Error('NO_BACKEND') if the local model OOMs / is unavailable and no
+ *         API key is configured.
+ */
 export async function removeImageBackground(input: Buffer): Promise<Buffer> {
-  // Lazy-load: the package pulls in a large ONNX runtime, so we only require
-  // it when a background-removal command actually runs (keeps boot fast).
-  const { removeBackground } = await import('@imgly/background-removal-node');
-  // Normalise to PNG first so the segmenter gets a clean, predictable input.
+  // Normalise to PNG first so either backend gets a clean, predictable input.
   const png = await sharp(input).png().toBuffer();
-  const blob = new Blob([new Uint8Array(png)], { type: 'image/png' });
-  const result = await removeBackground(blob, { output: { format: 'image/png' } });
-  const arrayBuf = await result.arrayBuffer();
-  return Buffer.from(arrayBuf);
+
+  // ── Backend 1: remove.bg API (low memory, host-friendly) ──
+  const apiKey = env.removebgApiKey;
+  if (apiKey) {
+    const form = new FormData();
+    form.append('image_file', png, { filename: 'image.png', contentType: 'image/png' });
+    form.append('size', 'auto');
+    const { data } = await axios.post(
+      'https://api.remove.bg/v1.0/removebg',
+      form,
+      {
+        headers: { ...form.getHeaders(), 'X-Api-Key': apiKey },
+        responseType: 'arraybuffer',
+        timeout: 60_000,
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+      },
+    );
+    return Buffer.from(data);
+  }
+
+  // ── Backend 2: local ONNX model (needs RAM; may OOM on free hosts) ──
+  try {
+    const { removeBackground } = await import('@imgly/background-removal-node');
+    const blob = new Blob([new Uint8Array(png)], { type: 'image/png' });
+    const result = await removeBackground(blob, { output: { format: 'image/png' } });
+    const arrayBuf = await result.arrayBuffer();
+    return Buffer.from(arrayBuf);
+  } catch (err) {
+    waLogger.warn({ err }, 'local background removal failed (likely low memory)');
+    throw new Error('NO_BACKEND');
+  }
 }

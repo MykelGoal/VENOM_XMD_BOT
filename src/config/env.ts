@@ -121,6 +121,12 @@ export const env = {
     defaultVoice: optional('FISHAUDIO_DEFAULT_VOICE', ''),
   },
 
+  // remove.bg API key for .nobg background removal (optional).
+  // Free key (50 images/mo) at remove.bg — recommended on low-RAM free hosts
+  // where the local ONNX model gets OOM-killed. If unset, .nobg falls back to
+  // the bundled local model (needs ~1-2GB RAM).
+  removebgApiKey: optional('REMOVEBG_API_KEY', ''),
+
   // Sticker
   sticker: {
     pack: optional('STICKER_PACK', 'VENOM-XMD'),

@@ -77,7 +77,7 @@ Signature features:
 • Vision: ${p()}vision (describe / answer questions about an image) and ${p()}ocr (read/extract text from an image).
 • Voice in: ${p()}transcribe (voice note → text, can translate) and ${p()}autovoice on|off (auto-transcribe every incoming voice note). Powered by Whisper.
 • Voice out: ${p()}tts <text> (aka ${p()}say) speaks text as a voice note. ${p()}clonevoice <name> (OWNER ONLY — reply to a 10–30s clean voice note) clones a voice; after that ${p()}tts uses it automatically. ${p()}myvoice shows/deletes your clone. Needs a Fish Audio key; only clone voices you have permission to use.
-• Images: ${p()}nobg removes an image background (transparent PNG or sticker), ${p()}sticker, ${p()}toimg, ${p()}emojimix, 15+ filters (${p()}wasted ${p()}jail ${p()}triggered), ${p()}wallpaper.
+• Images: ${p()}nobg removes an image background (transparent PNG or sticker — on free/low-RAM hosts the owner should set a free REMOVEBG_API_KEY from remove.bg so it works reliably), ${p()}sticker, ${p()}toimg, ${p()}emojimix, 15+ filters (${p()}wasted ${p()}jail ${p()}triggered), ${p()}wallpaper.
 • Downloaders: ${p()}play ${p()}video (YouTube), ${p()}tiktok (no watermark), ${p()}facebook, ${p()}spotify, ${p()}apk, ${p()}lyrics.
 • Anime: ${p()}anime ${p()}manga ${p()}waifu + 50+ reaction GIFs (${p()}hug ${p()}slap ${p()}pat ${p()}kiss).
 • Tools & offline utils: ${p()}weather ${p()}wiki ${p()}github ${p()}qr ${p()}calc ${p()}translate ${p()}base64 ${p()}hash ${p()}password.
