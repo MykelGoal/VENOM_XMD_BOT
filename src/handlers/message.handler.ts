@@ -7,6 +7,7 @@ import { enforceAntilink } from '../middleware/antilink';
 import { handleAfk } from './afk.handler';
 import { handleVoiceNote } from './voice.handler';
 import { userRepo } from '../database/repositories/user.repo';
+import { groupStatsRepo } from '../database/repositories/groupstats.repo';
 import { settingsRepo } from '../database/repositories/settings.repo';
 import { msgCache } from '../core/msgcache';
 
@@ -66,6 +67,11 @@ export async function handleMessageUpsert(
 
     // Track the user (first-seen, counts).
     userRepo.ensure(msg.senderNumber, raw.pushName ?? undefined);
+
+    // Track per-group member activity (for .groupstats / .active / .inactive).
+    if (msg.isGroup) {
+      groupStatsRepo.record(msg.chat, msg.senderNumber);
+    }
 
     // Passive presence behaviors.
     if (settingsRepo.getBool('autoread')) {

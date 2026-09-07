@@ -16,6 +16,10 @@ function defaults(jid: string): GroupModel {
     bannedWords: [],
     mutedUsers: [],
     createdAt: Date.now(),
+    welcomeText: '',
+    goodbyeText: '',
+    antipromote: false,
+    antidemote: false,
   };
 }
 
@@ -78,5 +82,12 @@ export const groupRepo = {
   },
   isUserMuted(jid: string, number: string): boolean {
     return this.get(jid)?.mutedUsers.includes(number) ?? false;
+  },
+
+  /** Set a free-text field (welcomeText / goodbyeText). */
+  setText(jid: string, field: 'welcomeText' | 'goodbyeText', value: string): void {
+    const g = this.ensure(jid);
+    (g as any)[field] = value;
+    groups.set(jid, g);
   },
 };
