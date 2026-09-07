@@ -4,6 +4,7 @@ import { env } from '../config';
 import { logger } from '../utils/logger';
 import { settingsRepo } from '../database/repositories/settings.repo';
 import { buildVenomBrain } from './venom-brain';
+import { toWhatsApp } from '../utils/waformat';
 
 /**
  * Multi-provider AI reply service with automatic fallback.
@@ -220,7 +221,7 @@ export async function getAIReply(opts: AIReplyOptions): Promise<string> {
   for (const provider of providers) {
     try {
       const answer = await provider.call(opts);
-      if (answer && answer.trim()) return answer.trim();
+      if (answer && answer.trim()) return toWhatsApp(answer.trim());
       errors.push(`${provider.name}: empty response`);
     } catch (err) {
       const detail = axios.isAxiosError(err)
