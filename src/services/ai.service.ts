@@ -1,4 +1,5 @@
 import axios from 'axios';
+import FormData from 'form-data';
 import { env } from '../config';
 import { logger } from '../utils/logger';
 import { settingsRepo } from '../database/repositories/settings.repo';
@@ -318,4 +319,206 @@ async function geminiReply(opts: AIReplyOptions): Promise<string> {
     .join('')
     .trim();
   return text || '🤖 (no response from Gemini)';
+}
+
+/** True when a Groq key is available (Whisper speech-to-text needs it). */
+export function isTranscriptionConfigured(): boolean {
+  return Boolean(effectiveAIKey('groq'));
+}
+
+export interface TranscribeOptions {
+  /** Force translation to English instead of transcribing in-language. */
+  translate?: boolean;
+  /** Optional BCP-47 / ISO-639-1 language hint (e.g. 'en', 'es'). */
+  language?: string;
+  /** Filename hint for the multipart upload (affects nothing but logs). */
+  filename?: string;
+}
+
+/**
+ * Transcribe (or translate) an audio buffer to text using Groq Whisper.
+ * Uses the OpenAI-compatible /audio/transcriptions | /audio/translations
+ * endpoints on Groq — fast and free-tier friendly. Requires GROQ_API_KEY.
+ *
+ * @throws Error('NO_KEY') when no Groq key is configured.
+ */
+export async function transcribeAudio(
+  audio: Buffer,
+  opts: TranscribeOptions = {},
+): Promise<string> {
+  const apiKey = effectiveAIKey('groq');
+  if (!apiKey) throw new Error('NO_KEY');
+
+  const baseUrl = env.ai.groq.baseUrl.replace(/\/$/, '');
+  const endpoint = opts.translate
+    ? `${baseUrl}/audio/translations`
+    : `${baseUrl}/audio/transcriptions`;
+
+  const form = new FormData();
+  form.append('file', audio, { filename: opts.filename ?? 'audio.mp3' });
+  form.append('model', env.ai.groq.sttModel);
+  form.append('response_format', 'json');
+  // /audio/translations always outputs English and rejects a language param.
+  if (!opts.translate && opts.language) {
+    form.append('language', opts.language);
+  }
+
+  const { data } = await axios.post(endpoint, form, {
+    headers: { ...form.getHeaders(), Authorization: `Bearer ${apiKey}` },
+    timeout: 60_000,
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity,
+  });
+
+  return (data?.text ?? '').trim();
+}
+
+/** Vision-capable providers, in preference order, with their model + caller. */
+const VISION_PROVIDERS: Array<{
+  name: string;
+  hasKey: () => boolean;
+  call: (imgB64: string, mime: string, prompt: string) => Promise<string>;
+}> = [
+  {
+    name: 'gemini',
+    hasKey: () => Boolean(effectiveAIKey('gemini')),
+    call: (imgB64, mime, prompt) => geminiVision(imgB64, mime, prompt),
+  },
+  {
+    name: 'openai',
+    hasKey: () => Boolean(effectiveAIKey('openai')),
+    call: (imgB64, mime, prompt) =>
+      openAIVision(imgB64, mime, prompt, {
+        apiKey: effectiveAIKey('openai'),
+        model: effectiveAIModel('openai'),
+        baseUrl: env.ai.baseUrl,
+      }),
+  },
+  {
+    name: 'openrouter',
+    hasKey: () => Boolean(effectiveAIKey('openrouter')),
+    call: (imgB64, mime, prompt) =>
+      openAIVision(imgB64, mime, prompt, {
+        apiKey: effectiveAIKey('openrouter'),
+        model: effectiveAIModel('openrouter'),
+        baseUrl: env.ai.openrouter.baseUrl,
+        extraHeaders: {
+          'HTTP-Referer': 'https://github.com/MykelGoal/VENOM_XMD_BOT',
+          'X-Title': env.botName,
+        },
+      }),
+  },
+];
+
+/** True when at least one vision-capable provider has a key. */
+export function isVisionConfigured(): boolean {
+  return VISION_PROVIDERS.some((p) => p.hasKey());
+}
+
+/** Names of vision-capable providers that are keyed (diagnostics). */
+export function configuredVisionProviders(): string[] {
+  return VISION_PROVIDERS.filter((p) => p.hasKey()).map((p) => p.name);
+}
+
+/**
+ * Analyse an image with a vision model and answer a text prompt about it.
+ * Tries each keyed vision provider in order until one succeeds.
+ *
+ * @throws Error('NO_VISION') when no vision-capable provider is configured.
+ */
+export async function analyzeImage(
+  image: Buffer,
+  prompt: string,
+  mime = 'image/jpeg',
+): Promise<string> {
+  const providers = VISION_PROVIDERS.filter((p) => p.hasKey());
+  if (providers.length === 0) throw new Error('NO_VISION');
+
+  const b64 = image.toString('base64');
+  let lastErr: unknown;
+  for (const p of providers) {
+    try {
+      const out = await p.call(b64, mime, prompt);
+      if (out) return out;
+    } catch (err) {
+      lastErr = err;
+      logger.warn({ err, provider: p.name }, 'vision provider failed');
+    }
+  }
+  throw lastErr ?? new Error('All vision providers failed.');
+}
+
+async function geminiVision(
+  imgB64: string,
+  mime: string,
+  prompt: string,
+): Promise<string> {
+  const model = effectiveAIModel('gemini');
+  const url =
+    `https://generativelanguage.googleapis.com/v1beta/models/` +
+    `${model}:generateContent?key=${effectiveAIKey('gemini')}`;
+
+  const { data } = await axios.post(
+    url,
+    {
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: prompt },
+            { inline_data: { mime_type: mime, data: imgB64 } },
+          ],
+        },
+      ],
+      generationConfig: { maxOutputTokens: MAX_TOKENS },
+    },
+    { headers: { 'Content-Type': 'application/json' }, timeout: REQUEST_TIMEOUT_MS },
+  );
+
+  const text = data?.candidates?.[0]?.content?.parts
+    ?.map((p: { text?: string }) => p.text ?? '')
+    .join('')
+    .trim();
+  return text || '';
+}
+
+async function openAIVision(
+  imgB64: string,
+  mime: string,
+  prompt: string,
+  cfg: {
+    apiKey: string;
+    model: string;
+    baseUrl: string;
+    extraHeaders?: Record<string, string>;
+  },
+): Promise<string> {
+  const { data } = await axios.post(
+    `${cfg.baseUrl.replace(/\/$/, '')}/chat/completions`,
+    {
+      model: cfg.model,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            {
+              type: 'image_url',
+              image_url: { url: `data:${mime};base64,${imgB64}` },
+            },
+          ],
+        },
+      ],
+      max_tokens: MAX_TOKENS,
+    },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cfg.apiKey}`,
+        ...(cfg.extraHeaders ?? {}),
+      },
+      timeout: REQUEST_TIMEOUT_MS,
+    },
+  );
+  return data?.choices?.[0]?.message?.content?.trim() ?? '';
 }

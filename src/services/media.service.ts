@@ -272,3 +272,23 @@ export async function sendGifFromUrl(
   const mp4 = await gifToMp4(gif);
   await send(mp4);
 }
+
+/**
+ * Remove the background from an image, returning a transparent PNG buffer.
+ *
+ * Uses @imgly/background-removal-node — an ONNX segmentation model that runs
+ * fully in-process. No API key, no external service, works offline. The model
+ * weights are bundled with the package, so the first call may take a few
+ * seconds to warm up; subsequent calls are faster.
+ */
+export async function removeImageBackground(input: Buffer): Promise<Buffer> {
+  // Lazy-load: the package pulls in a large ONNX runtime, so we only require
+  // it when a background-removal command actually runs (keeps boot fast).
+  const { removeBackground } = await import('@imgly/background-removal-node');
+  // Normalise to PNG first so the segmenter gets a clean, predictable input.
+  const png = await sharp(input).png().toBuffer();
+  const blob = new Blob([new Uint8Array(png)], { type: 'image/png' });
+  const result = await removeBackground(blob, { output: { format: 'image/png' } });
+  const arrayBuf = await result.arrayBuffer();
+  return Buffer.from(arrayBuf);
+}

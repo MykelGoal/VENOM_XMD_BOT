@@ -5,6 +5,7 @@ import { serializeMessage } from '../utils/serialize';
 import { handleCommand } from './command.handler';
 import { enforceAntilink } from '../middleware/antilink';
 import { handleAfk } from './afk.handler';
+import { handleVoiceNote } from './voice.handler';
 import { userRepo } from '../database/repositories/user.repo';
 import { settingsRepo } from '../database/repositories/settings.repo';
 import { msgCache } from '../core/msgcache';
@@ -82,6 +83,9 @@ export async function handleMessageUpsert(
 
     // Passive: AFK notifications / auto-return.
     await handleAfk(sock, msg);
+
+    // Passive: auto-transcribe incoming voice notes when enabled.
+    await handleVoiceNote(sock, msg);
 
     await handleCommand(sock, msg);
   }

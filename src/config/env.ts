@@ -94,6 +94,8 @@ export const env = {
       apiKey: optional('GROQ_API_KEY', ''),
       model: optional('GROQ_MODEL', 'openai/gpt-oss-120b'),
       baseUrl: optional('GROQ_BASE_URL', 'https://api.groq.com/openai/v1'),
+      // Speech-to-text model used for voice-note transcription (Whisper).
+      sttModel: optional('GROQ_STT_MODEL', 'whisper-large-v3'),
     },
     // Google Gemini
     gemini: {
