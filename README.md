@@ -20,41 +20,60 @@
 
 ### ⚡ Pair once → paste `SESSION_ID` → deploy. No QR on the server.
 
-[🔑 Pair](https://session-site-2odn.onrender.com) · [🍴 Fork](https://github.com/MykelGoal/VENOM_XMD_BOT/fork) · [⭐ Star](https://github.com/MykelGoal/VENOM_XMD_BOT/stargazers)
+<br/>
+
+[![Pair](https://img.shields.io/badge/PAIR-GET_SESSION_ID-39ff88?style=for-the-badge&logo=whatsapp&logoColor=white&labelColor=050806)](https://session-site-2odn.onrender.com)
+[![Fork](https://img.shields.io/badge/FORK-ON_GITHUB-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/MykelGoal/VENOM_XMD_BOT/fork)
+[![Stars](https://img.shields.io/github/stars/MykelGoal/VENOM_XMD_BOT?style=for-the-badge&label=STAR&labelColor=050806&color=39ff88&logo=github&logoColor=white)](https://github.com/MykelGoal/VENOM_XMD_BOT/stargazers)
 
 </div>
 
 ---
 
-### ① 🔑 Pair — once
+## ① 🔑 Pair — once
 
-> ### 👉 [**PAIR HERE → session-site-2odn.onrender.com**](https://session-site-2odn.onrender.com) 👈
+<div align="center">
 
-Link WhatsApp — **QR** 📷 or **pairing code** 🔢 — then copy the **`SESSION_ID`**.
+[![Pair Now](https://img.shields.io/badge/🔗_PAIR_NOW-session--site--2odn.onrender.com-25D366?style=for-the-badge&logo=whatsapp&logoColor=white&labelColor=050806)](https://session-site-2odn.onrender.com)
+
+*Link WhatsApp — **QR** 📷 or **pairing code** 🔢 — then copy your **`SESSION_ID`**.*
 *It's a password — keep it secret 🤫*
 
-### ② 🚀 Deploy
+</div>
 
-| | | | |
-|:---:|:---:|:---:|:---:|
-| [![Heroku](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/MykelGoal/VENOM_XMD_BOT) | [![Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/MykelGoal/VENOM_XMD_BOT) | [![Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/MykelGoal/VENOM_XMD_BOT) | [![Koyeb](https://www.koyeb.com/static/images/deploy/button.svg)](https://app.koyeb.com/deploy?type=git&repository=github.com/MykelGoal/VENOM_XMD_BOT&branch=main&name=venom-xmd) |
+## ② 🚀 Deploy — one click
 
-Only **two** settings — everything else has defaults:
+<div align="center">
+
+| | |
+|:---:|:---:|
+| [![Heroku](https://img.shields.io/badge/🟣_DEPLOY_TO-HEROKU-430098?style=for-the-badge&logo=heroku&logoColor=white)](https://heroku.com/deploy?template=https://github.com/MykelGoal/VENOM_XMD_BOT) | [![Render](https://img.shields.io/badge/⬛_DEPLOY_TO-RENDER-009688?style=for-the-badge&logo=render&logoColor=white)](https://render.com/deploy?repo=https://github.com/MykelGoal/VENOM_XMD_BOT) |
+| [![Railway](https://img.shields.io/badge/🚂_DEPLOY_ON-RAILWAY-0B0D0E?style=for-the-badge&logo=railway&logoColor=white)](https://railway.app/new/template?template=https://github.com/MykelGoal/VENOM_XMD_BOT) | [![Koyeb](https://img.shields.io/badge/🔵_DEPLOY_TO-KOYEB-1E2430?style=for-the-badge&logo=koyeb&logoColor=white)](https://app.koyeb.com/deploy?type=git&repository=github.com/MykelGoal/VENOM_XMD_BOT&branch=main&name=venom-xmd) |
+
+*Only **two** settings — everything else has defaults:*
 
 | Variable | Example | |
 |:---------|:---------|:--|
 | `SESSION_ID` | `VENOM-XXXX-XXXX` | from the [session site](https://session-site-2odn.onrender.com) |
 | `OWNER_NUMBER` | `2348012345678` | your number, no `+` |
 
-### ③ 💬 Use
+</div>
 
-> Send <kbd>.menu</kbd> — then try <kbd>.ai</kbd> <kbd>.play</kbd> <kbd>.sticker</kbd> <kbd>.weather</kbd> <kbd>.waifu</kbd>
->
-> **392 commands. One menu. 🎉**
+## ③ 💬 Use
+
+<div align="center">
+
+<br/>
+
+**Send <kbd>.menu</kbd> — then try <kbd>.ai</kbd> <kbd>.play</kbd> <kbd>.sticker</kbd> <kbd>.weather</kbd> <kbd>.waifu</kbd>**
+
+**392 commands. One menu. 🎉**
+
+</div>
 
 ---
 
-### 💻 Local
+## 💻 Local
 
 ```bash
 git clone https://github.com/MykelGoal/VENOM_XMD_BOT && cd VENOM_XMD_BOT
