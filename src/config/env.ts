@@ -85,10 +85,12 @@ export const env = {
       model: optional('OPENROUTER_MODEL', 'deepseek/deepseek-chat-v3.1:free'),
       baseUrl: optional('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
     },
-    // Groq (OpenAI-compatible; very fast, has a free tier)
+    // Groq (OpenAI-compatible; very fast, has a free tier).
+    // Default model 'openai/gpt-oss-120b' is widely available on Groq; the
+    // older 'llama-3.3-70b-versatile' 404s on many newer accounts.
     groq: {
       apiKey: optional('GROQ_API_KEY', ''),
-      model: optional('GROQ_MODEL', 'llama-3.3-70b-versatile'),
+      model: optional('GROQ_MODEL', 'openai/gpt-oss-120b'),
       baseUrl: optional('GROQ_BASE_URL', 'https://api.groq.com/openai/v1'),
     },
     // Google Gemini

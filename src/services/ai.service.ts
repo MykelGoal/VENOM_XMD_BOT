@@ -73,6 +73,33 @@ function effectiveAIKey(provider: string): string {
   return getRuntimeAIKey(provider) || ENV_KEYS[provider]?.() || '';
 }
 
+/** Env-variable model default for each provider. */
+const ENV_MODELS: Record<string, () => string> = {
+  deepseek: () => env.ai.deepseek.model,
+  gemini: () => env.ai.gemini.model,
+  openrouter: () => env.ai.openrouter.model,
+  groq: () => env.ai.groq.model,
+  openai: () => env.ai.model,
+};
+
+const runtimeModelVar = (provider: string) =>
+  `ai.model.${provider.toLowerCase()}`;
+
+/** Model set at runtime via `.setkey <provider> model <name>`, if any. */
+export function getRuntimeAIModel(provider: string): string | undefined {
+  return settingsRepo.get(runtimeModelVar(provider));
+}
+
+/** Persist a runtime model (takes effect immediately). */
+export function setRuntimeAIModel(provider: string, model: string): void {
+  settingsRepo.set(runtimeModelVar(provider), model);
+}
+
+/** Runtime model if set, otherwise the env/default model. */
+function effectiveAIModel(provider: string): string {
+  return (getRuntimeAIModel(provider) || '').trim() || ENV_MODELS[provider]?.() || '';
+}
+
 /** Mask a key for display: AIzaSy••••••8f2q */
 export function maskKey(key: string): string {
   if (key.length <= 10) return `${key.slice(0, 2)}••••••`;
@@ -93,7 +120,7 @@ const PROVIDERS: Record<string, ProviderCfg> = {
     call: (o) =>
       openAICompatible(o, {
         apiKey: effectiveAIKey('deepseek'),
-        model: env.ai.deepseek.model,
+        model: effectiveAIModel('deepseek'),
         baseUrl: env.ai.deepseek.baseUrl,
       }),
   },
@@ -103,7 +130,7 @@ const PROVIDERS: Record<string, ProviderCfg> = {
     call: (o) =>
       openAICompatible(o, {
         apiKey: effectiveAIKey('openrouter'),
-        model: env.ai.openrouter.model,
+        model: effectiveAIModel('openrouter'),
         baseUrl: env.ai.openrouter.baseUrl,
         extraHeaders: {
           'HTTP-Referer': 'https://github.com/MykelGoal/VENOM_XMD_BOT',
@@ -117,7 +144,7 @@ const PROVIDERS: Record<string, ProviderCfg> = {
     call: (o) =>
       openAICompatible(o, {
         apiKey: effectiveAIKey('groq'),
-        model: env.ai.groq.model,
+        model: effectiveAIModel('groq'),
         baseUrl: env.ai.groq.baseUrl,
       }),
   },
@@ -127,7 +154,7 @@ const PROVIDERS: Record<string, ProviderCfg> = {
     call: (o) =>
       openAICompatible(o, {
         apiKey: effectiveAIKey('openai'),
-        model: env.ai.model,
+        model: effectiveAIModel('openai'),
         baseUrl: env.ai.baseUrl,
       }),
   },
@@ -199,7 +226,28 @@ export async function getAIReply(opts: AIReplyOptions): Promise<string> {
   }
 
   logger.error({ errors }, 'All AI providers failed');
-  return '⚠️ All AI providers are unavailable right now. Please try again later.';
+
+  // Surface a short, useful reason instead of a dead-end message.
+  const first = errors[0] ?? '';
+  let hint = '';
+  if (/model.*(not|does not) exist|model_not_found|not found/i.test(first)) {
+    hint =
+      '\n\n🧩 Looks like a *wrong model name*. Fix it with e.g.\n' +
+      '`.setkey groq model openai/gpt-oss-120b`\n' +
+      '`.setkey gemini model gemini-flash-latest`';
+  } else if (/401|403|api key|invalid.*key|unauthor/i.test(first)) {
+    hint = '\n\n🔑 Looks like an *invalid key*. Re-set it with `.setkey <provider> <key>`.';
+  } else if (/429|quota|rate/i.test(first)) {
+    hint = '\n\n⏳ Rate-limited / out of quota. Try again shortly or add another provider.';
+  } else if (/503|overload|unavailable|high demand/i.test(first)) {
+    hint = '\n\n📡 The provider is temporarily overloaded. Try again in a moment.';
+  }
+
+  return (
+    `⚠️ AI request failed on: ${providers.map((p) => p.name).join(', ')}.` +
+    hint +
+    `\n\n_Owner: run *.aistatus* or *.setkey list* to check keys & models._`
+  );
 }
 
 /** Call any OpenAI-compatible /chat/completions endpoint. */
@@ -238,7 +286,7 @@ async function openAICompatible(
 }
 
 async function geminiReply(opts: AIReplyOptions): Promise<string> {
-  const model = env.ai.gemini.model;
+  const model = effectiveAIModel('gemini');
   const url =
     `https://generativelanguage.googleapis.com/v1beta/models/` +
     `${model}:generateContent?key=${effectiveAIKey('gemini')}`;

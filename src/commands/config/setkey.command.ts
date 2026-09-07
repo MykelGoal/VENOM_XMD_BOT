@@ -7,6 +7,8 @@ import {
   maskKey,
   removeRuntimeAIKey,
   setRuntimeAIKey,
+  setRuntimeAIModel,
+  getRuntimeAIModel,
 } from '../../services/ai.service';
 import { env } from '../../config';
 
@@ -112,6 +114,37 @@ const setkey: Command = {
           }`,
         );
       }
+      return;
+    }
+
+    // ── .setkey <provider> model <model-name> ────────────────
+    if ((args[1] ?? '').toLowerCase() === 'model') {
+      const provider = sub;
+      if (!AI_PROVIDER_NAMES.includes(provider)) {
+        await reply(
+          sock,
+          msg,
+          `❌ Unknown provider *${provider}*.\nUse: ${AI_PROVIDER_NAMES.join(' · ')}`,
+        );
+        return;
+      }
+      const model = args.slice(2).join(' ').trim();
+      if (!model) {
+        const current = getRuntimeAIModel(provider);
+        await reply(
+          sock,
+          msg,
+          `ℹ️ Usage: *setkey ${provider} model <model-name>*` +
+            (current ? `\nCurrent: ${current}` : ''),
+        );
+        return;
+      }
+      setRuntimeAIModel(provider, model);
+      await reply(
+        sock,
+        msg,
+        `✅ *${provider}* model set → ${model}\nTest with *.ai hello*`,
+      );
       return;
     }
 
