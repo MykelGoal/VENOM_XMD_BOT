@@ -60,10 +60,12 @@ export const env = {
   // or out of quota it automatically falls back to the next.
   ai: {
     // Preferred primary provider (kept for backward compatibility).
-    provider: optional('AI_PROVIDER', 'openai'),
+    // Groq is fast + reliable, so it leads; others are automatic backups.
+    provider: optional('AI_PROVIDER', 'groq'),
     autoReply: bool('AI_AUTO_REPLY', false),
     // Comma-separated fallback order. Only providers with a key are tried.
-    order: optional('AI_ORDER', 'deepseek,gemini,openrouter,groq,openai')
+    // Groq first (fastest), then Gemini, then the rest.
+    order: optional('AI_ORDER', 'groq,gemini,openrouter,deepseek,openai')
       .split(',')
       .map((p) => p.trim().toLowerCase())
       .filter(Boolean),

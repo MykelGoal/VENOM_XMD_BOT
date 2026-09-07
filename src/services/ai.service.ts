@@ -28,6 +28,15 @@ export interface AIReplyOptions {
 // The Venom Brain — full identity, knowledge & personality (see venom-brain.ts).
 const DEFAULT_SYSTEM = VENOM_BRAIN;
 
+/* ─── Speed tuning ───────────────────────────────────────────────────────
+ * A shorter per-provider timeout means a stuck/overloaded provider gives up
+ * fast and we fall back to the next one instead of the user waiting ~1 min.
+ * max_tokens caps reply length so generation finishes quickly (WhatsApp
+ * replies should be short anyway).
+ */
+const REQUEST_TIMEOUT_MS = 18_000;
+const MAX_TOKENS = 512;
+
 /* ─── Runtime key layer (.setkey) ────────────────────────────────────────
  * Keys set via the .setkey owner command are persisted in the settings
  * store and ALWAYS win over env variables — so owners can add/replace
@@ -269,6 +278,7 @@ async function openAICompatible(
         { role: 'user', content: opts.prompt },
       ],
       temperature: 0.7,
+      max_tokens: MAX_TOKENS,
     },
     {
       headers: {
@@ -276,7 +286,7 @@ async function openAICompatible(
         Authorization: `Bearer ${cfg.apiKey}`,
         ...(cfg.extraHeaders ?? {}),
       },
-      timeout: 60_000,
+      timeout: REQUEST_TIMEOUT_MS,
     },
   );
   return (
@@ -298,8 +308,9 @@ async function geminiReply(opts: AIReplyOptions): Promise<string> {
         parts: [{ text: opts.system ?? DEFAULT_SYSTEM }],
       },
       contents: [{ role: 'user', parts: [{ text: opts.prompt }] }],
+      generationConfig: { maxOutputTokens: MAX_TOKENS },
     },
-    { headers: { 'Content-Type': 'application/json' }, timeout: 60_000 },
+    { headers: { 'Content-Type': 'application/json' }, timeout: REQUEST_TIMEOUT_MS },
   );
 
   const text = data?.candidates?.[0]?.content?.parts

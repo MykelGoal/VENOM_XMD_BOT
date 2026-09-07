@@ -15,7 +15,10 @@ const ai: Command = {
       return;
     }
     await react(sock, msg, '🤖');
+    // Show "typing…" so it feels responsive while the model generates.
+    await sock.sendPresenceUpdate('composing', msg.chat).catch(() => {});
     const answer = await getAIReply({ prompt });
+    await sock.sendPresenceUpdate('paused', msg.chat).catch(() => {});
     await reply(sock, msg, answer);
   },
 };
