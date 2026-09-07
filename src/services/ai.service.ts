@@ -2,6 +2,7 @@ import axios from 'axios';
 import { env } from '../config';
 import { logger } from '../utils/logger';
 import { settingsRepo } from '../database/repositories/settings.repo';
+import { VENOM_BRAIN } from './venom-brain';
 
 /**
  * Multi-provider AI reply service with automatic fallback.
@@ -24,9 +25,8 @@ export interface AIReplyOptions {
   system?: string;
 }
 
-const DEFAULT_SYSTEM =
-  `You are ${env.botName}, a helpful, witty WhatsApp assistant. ` +
-  'Keep replies concise and friendly. Use emojis sparingly.';
+// The Venom Brain — full identity, knowledge & personality (see venom-brain.ts).
+const DEFAULT_SYSTEM = VENOM_BRAIN;
 
 /* ─── Runtime key layer (.setkey) ────────────────────────────────────────
  * Keys set via the .setkey owner command are persisted in the settings
