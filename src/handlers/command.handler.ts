@@ -26,15 +26,24 @@ export async function handleCommand(
 ): Promise<void> {
   const { prefix } = env;
 
-  // AI auto-reply: respond to normal DMs when enabled and configured.
+  // AI auto-reply ("AI mode"): reply to normal (non-command) messages with AI.
+  //   settings 'aimode':  off (default) | dm | all
+  //   env AI_AUTO_REPLY=true is treated as 'dm' for backward compatibility.
   if (!msg.body.startsWith(prefix)) {
-    if (
-      env.ai.autoReply &&
+    let aimode = settingsRepo.get('aimode');
+    if (!aimode) aimode = env.ai.autoReply ? 'dm' : 'off';
+
+    const wantReply =
+      aimode !== 'off' &&
       isAIConfigured() &&
-      !msg.isGroup &&
-      msg.body.trim().length > 0
-    ) {
+      msg.body.trim().length > 0 &&
+      !msg.fromMe &&
+      (aimode === 'all' || !msg.isGroup);
+
+    if (wantReply) {
+      await sock.sendPresenceUpdate('composing', msg.chat).catch(() => {});
       const answer = await getAIReply({ prompt: msg.body });
+      await sock.sendPresenceUpdate('paused', msg.chat).catch(() => {});
       await reply(sock, msg, answer);
     }
     return;
