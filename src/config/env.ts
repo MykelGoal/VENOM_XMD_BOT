@@ -107,6 +107,20 @@ export const env = {
     },
   },
 
+  // Fish Audio — text-to-speech + instant voice cloning.
+  // The deployer brings their OWN key (console.fish.audio → API keys); the
+  // free developer tier uses the 's2.1-pro-free' model. Cloning is gated to
+  // the owner/sudo by default (see .clonevoice) to prevent abuse/deepfakes.
+  fish: {
+    apiKey: optional('FISHAUDIO_API_KEY', ''),
+    baseUrl: optional('FISHAUDIO_BASE_URL', 'https://api.fish.audio'),
+    // TTS engine model (NOT the voice). s2.1-pro-free = free dev tier.
+    model: optional('FISHAUDIO_MODEL', 's2.1-pro-free'),
+    // Optional default voice model ID used by .tts when the caller has no
+    // personal clone. Leave blank to use Fish's built-in default voice.
+    defaultVoice: optional('FISHAUDIO_DEFAULT_VOICE', ''),
+  },
+
   // Sticker
   sticker: {
     pack: optional('STICKER_PACK', 'VENOM-XMD'),
