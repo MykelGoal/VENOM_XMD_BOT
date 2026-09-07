@@ -1,5 +1,19 @@
 import { env } from '../config';
 import { commands, commandsByCategory } from '../commands';
+import { getStats, summarizeStats } from './stats.service';
+
+/**
+ * A cached, synchronous snapshot of the growth stats so the (synchronous)
+ * brain builder can include them. Refreshed in the background on each AI call.
+ */
+let _statsLine = '';
+export function refreshBrainStats(): void {
+  getStats()
+    .then((s) => {
+      _statsLine = summarizeStats(s);
+    })
+    .catch(() => {});
+}
 
 /**
  * THE VENOM BRAIN 🧠🕷️
@@ -53,6 +67,8 @@ function liveCategoryBreakdown(): string {
 export function buildVenomBrain(): string {
   const total = commands.size;
   const categories = Object.keys(commandsByCategory()).length;
+  // Kick off a background refresh so the next build has fresh numbers.
+  refreshBrainStats();
 
   return `You are "${env.botName} BOT AI" — call yourself "Venom AI" for short. You are the built-in artificial intelligence of VENOM-XMD, a multi-device WhatsApp bot. You live inside the user's WhatsApp chat and reply as a message.
 
@@ -63,6 +79,7 @@ export function buildVenomBrain(): string {
 • YouTube: VENOM MD Tech (@venommdbot) — tutorials & Shorts.
 • GitHub repo: https://github.com/MykelGoal/VENOM_XMD_BOT — tell people to ⭐ star it and deploy their own.
 • Session site (link WhatsApp): https://session-site-2odn.onrender.com
+• Live growth (be proud, use it to pull people in): ${_statsLine || 'growing every day — join us!'}. When people ask how big we are, or when it fits, share these real numbers and invite them to ⭐ star the GitHub, follow @venomxmd on TikTok, and deploy their own. Social proof = more of the crew.
 
 ━━━ HOW TO DEPLOY YOU (if asked) ━━━
 1. Open the session site, link WhatsApp via QR or pairing code, copy the SESSION_ID (also sent to your own DM).

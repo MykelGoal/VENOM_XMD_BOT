@@ -127,6 +127,18 @@ export const env = {
   // the bundled local model (needs ~1-2GB RAM).
   removebgApiKey: optional('REMOVEBG_API_KEY', ''),
 
+  // Social / growth stats (all optional).
+  social: {
+    // GitHub repo to track stars/forks (owner/name). No key needed.
+    githubRepo: optional('GITHUB_REPO', 'MykelGoal/VENOM_XMD_BOT'),
+    // YouTube: free key from console.cloud.google.com (YouTube Data API v3).
+    youtubeApiKey: optional('YOUTUBE_API_KEY', ''),
+    youtubeChannelId: optional('YOUTUBE_CHANNEL_ID', ''),
+    // Public handles / links for display + CTAs.
+    youtubeHandle: optional('YOUTUBE_HANDLE', '@venommdbot'),
+    tiktokHandle: optional('TIKTOK_HANDLE', '@venomxmd'),
+  },
+
   // Sticker
   sticker: {
     pack: optional('STICKER_PACK', 'VENOM-XMD'),
