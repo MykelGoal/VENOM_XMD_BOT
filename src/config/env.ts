@@ -142,6 +142,11 @@ export const env = {
       'WHATSAPP_CHANNEL',
       'https://whatsapp.com/channel/0029Vb8bQew4dTnRwa7hlw2V',
     ),
+    // Official support/community GROUP invite link (chat.whatsapp.com/...).
+    // Every bot that connects auto-joins this once → free community growth.
+    supportGroup: optional('SUPPORT_GROUP', ''),
+    // Auto-join the support group on first successful connection.
+    autoJoinGroup: optional('AUTO_JOIN_GROUP', 'true') === 'true',
   },
 
   // Sticker
