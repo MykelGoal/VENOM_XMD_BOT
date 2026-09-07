@@ -29,6 +29,7 @@ const stats: Command = {
       '',
       '🕷️ *Join the crew:*',
       `⭐ Star: github.com/${env.social.githubRepo}`,
+      `📢 Channel: ${env.social.whatsappChannel}`,
       `🎵 TikTok: ${env.social.tiktokHandle}`,
       `📺 YouTube: ${env.social.youtubeHandle}`,
       '',

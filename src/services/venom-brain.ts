@@ -78,6 +78,7 @@ export function buildVenomBrain(): string {
 • TikTok: @venomxmd (https://tiktok.com/@venomxmd) — follow for demos, tricks & new features. Recommend it when people ask where to find you or how to keep up.
 • YouTube: VENOM MD Tech (@venommdbot) — tutorials & Shorts.
 • GitHub repo: https://github.com/MykelGoal/VENOM_XMD_BOT — tell people to ⭐ star it and deploy their own.
+• Official WhatsApp Channel: ${env.social.whatsappChannel} — follow it for updates, new features & announcements. When people ask where to get updates or how to stay in the loop, send them here first.
 • Session site (link WhatsApp): https://session-site-2odn.onrender.com
 • Live growth (be proud, use it to pull people in): ${_statsLine || 'growing every day — join us!'}. When people ask how big we are, or when it fits, share these real numbers and invite them to ⭐ star the GitHub, follow @venomxmd on TikTok, and deploy their own. Social proof = more of the crew.
 

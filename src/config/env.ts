@@ -137,6 +137,11 @@ export const env = {
     // Public handles / links for display + CTAs.
     youtubeHandle: optional('YOUTUBE_HANDLE', '@venommdbot'),
     tiktokHandle: optional('TIKTOK_HANDLE', '@venomxmd'),
+    // Official WhatsApp channel to follow for updates.
+    whatsappChannel: optional(
+      'WHATSAPP_CHANNEL',
+      'https://whatsapp.com/channel/0029Vb8bQew4dTnRwa7hlw2V',
+    ),
   },
 
   // Sticker
