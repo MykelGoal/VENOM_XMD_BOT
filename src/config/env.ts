@@ -154,6 +154,17 @@ export const env = {
     pack: optional('STICKER_PACK', 'VENOM-XMD'),
     author: optional('STICKER_AUTHOR', 'venom'),
   },
+
+  // Host / platform integration — lets .setkey (and friends) persist keys as
+  // real env vars on the host so they SURVIVE redeploys & new commits.
+  // Currently supports Render. Get RENDER_API_KEY from Render dashboard →
+  // Account Settings → API Keys, and RENDER_SERVICE_ID from your service URL
+  // (the srv-xxxxxxxx part). Both optional; if unset, .setkey just saves
+  // locally as before.
+  host: {
+    renderApiKey: optional('RENDER_API_KEY', ''),
+    renderServiceId: optional('RENDER_SERVICE_ID', ''),
+  },
 } as const;
 
 // Validate login configuration early so failures are obvious.

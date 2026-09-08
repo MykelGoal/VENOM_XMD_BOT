@@ -63,6 +63,24 @@ const ENV_KEYS: Record<string, () => string> = {
   openai: () => env.ai.apiKey,
 };
 
+/**
+ * The actual host env-variable NAME each provider reads its key from.
+ * Used to persist a `.setkey` value to the host platform (Render) so it
+ * survives redeploys. Mirrors the `optional(...)` names in config/env.ts.
+ */
+const ENV_KEY_NAMES: Record<string, string> = {
+  deepseek: 'DEEPSEEK_API_KEY',
+  gemini: 'GEMINI_API_KEY',
+  openrouter: 'OPENROUTER_API_KEY',
+  groq: 'GROQ_API_KEY',
+  openai: 'AI_API_KEY',
+};
+
+/** Host env-variable name for a provider's API key (or undefined). */
+export function envKeyNameFor(provider: string): string | undefined {
+  return ENV_KEY_NAMES[provider.toLowerCase()];
+}
+
 const runtimeKeyVar = (provider: string) => `ai.key.${provider.toLowerCase()}`;
 
 /** Key set at runtime via .setkey, if any. */

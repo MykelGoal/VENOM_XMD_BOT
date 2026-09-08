@@ -9,7 +9,13 @@ import {
   setRuntimeAIKey,
   setRuntimeAIModel,
   getRuntimeAIModel,
+  envKeyNameFor,
 } from '../../services/ai.service';
+import {
+  hostPersistenceEnabled,
+  hostProviderName,
+  saveHostEnvVar,
+} from '../../services/host.service';
 import { env } from '../../config';
 
 /**
@@ -193,15 +199,49 @@ const setkey: Command = {
       deleted = false;
     }
 
+    // ── Persist to the host platform so it survives redeploys ──────
+    // Local save (above) is instant; the host save (Render) makes it
+    // permanent across redeploys/commits but triggers a short restart.
+    let hostLine = '';
+    const envName = envKeyNameFor(provider);
+    if (hostPersistenceEnabled() && envName) {
+      await reply(
+        sock,
+        msg,
+        `💾 Saving *${provider}* key permanently to ${hostProviderName()}…`,
+      );
+      const result = await saveHostEnvVar(envName, key);
+      if (result.ok) {
+        hostLine =
+          `🔒 *Saved permanently to ${result.provider}* — it will survive redeploys & new commits.` +
+          (result.willRestart
+            ? `\n♻️ The bot will restart in ~1-2 min to apply it. That's normal — it'll come back online automatically.`
+            : '');
+      } else if (result.error === 'invalid RENDER_API_KEY') {
+        hostLine =
+          `⚠️ Could not save to the host: *invalid RENDER_API_KEY*. The key still works now (saved locally), but set a valid RENDER_API_KEY to make it survive redeploys.`;
+      } else if (result.error === 'RENDER_SERVICE_ID not found') {
+        hostLine =
+          `⚠️ Could not save to the host: *RENDER_SERVICE_ID not found*. Check the srv-xxxx id. Key still works now (saved locally).`;
+      } else {
+        hostLine =
+          `⚠️ Host save failed (${result.error || 'unknown'}). The key still works now (saved locally) but may not survive a redeploy.`;
+      }
+    } else {
+      hostLine =
+        `ℹ️ _Tip:_ to make keys survive redeploys, set *RENDER_API_KEY* + *RENDER_SERVICE_ID* on your host. (Right now this key is saved locally and works until the next redeploy.)`;
+    }
+
     await reply(
       sock,
       msg,
       [
         `✅ *${provider}* key saved — ${maskKey(key)}`,
-        '⚡ Takes effect immediately, no restart needed.',
+        '⚡ Takes effect immediately.',
         deleted
           ? '🧹 Your message with the key was auto-deleted.'
           : '⚠️ I could not delete your message — please delete it, it contains the key!',
+        hostLine,
         'Verify with *.aistatus* or test with *.ai hello*',
         prefixWarn,
       ]
