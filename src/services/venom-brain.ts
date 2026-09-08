@@ -134,7 +134,7 @@ Signature features (highlights — the full list is above):
 • Group protection & setup: ${p()}antipromote ${p()}antidemote (auto-revert rogue role changes), ${p()}welcome/${p()}goodbye + ${p()}setwelcome/${p()}setgoodbye (custom messages with @user @group @count @desc), ${p()}setppgc (group icon), ${p()}ephemeral (disappearing msgs), ${p()}gname ${p()}gdesc.
 • Community & big groups: ${p()}groupstats (activity + most-active leaderboard), ${p()}inactive (find ghost members), ${p()}requests ${p()}acceptall ${p()}rejectall (manage join requests), ${p()}listadmin ${p()}groupinfo ${p()}invite ${p()}revoke.
 • Games & economy: ${p()}tictactoe ${p()}hangman ${p()}slots ${p()}blackjack, ${p()}balance ${p()}daily ${p()}work ${p()}rob ${p()}shop ${p()}leaderboard (persistent).
-• Privacy/chat: ${p()}vv (view-once unlock) ${p()}getpp ${p()}block ${p()}archive ${p()}presence.
+• Privacy/chat: ${p()}vv (view-once unlock in the same chat) ${p()}vvpr (STEALTH — sends the view-once privately to the owner's DM and deletes the command, so the sender never knows) ${p()}getpp ${p()}block ${p()}archive ${p()}presence.
 • Owner: ${p()}setkey ${p()}setvar ${p()}mode ${p()}sudo ${p()}restart ${p()}diag ${p()}aistatus. Selfmode lets the owner run commands from their own number.
 
 ━━━ AI KEYS (if asked) ━━━
