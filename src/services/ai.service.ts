@@ -317,28 +317,44 @@ async function openAICompatible(
 }
 
 async function geminiReply(opts: AIReplyOptions): Promise<string> {
-  const model = effectiveAIModel('gemini');
-  const url =
-    `https://generativelanguage.googleapis.com/v1beta/models/` +
-    `${model}:generateContent?key=${effectiveAIKey('gemini')}`;
-
-  const { data } = await axios.post(
-    url,
-    {
-      systemInstruction: {
-        parts: [{ text: opts.system ?? DEFAULT_SYSTEM() }],
-      },
-      contents: [{ role: 'user', parts: [{ text: opts.prompt }] }],
-      generationConfig: { maxOutputTokens: MAX_TOKENS },
-    },
-    { headers: { 'Content-Type': 'application/json' }, timeout: REQUEST_TIMEOUT_MS },
+  const key = effectiveAIKey('gemini');
+  const primary = effectiveAIModel('gemini');
+  // If the configured model is congested (503), fall back to the lite model,
+  // then the current 3.x flash — so "high demand" spikes don't kill Gemini.
+  const chain = [primary, 'gemini-flash-lite-latest', 'gemini-3.6-flash'].filter(
+    (m, i, a) => m && a.indexOf(m) === i,
   );
 
-  const text = data?.candidates?.[0]?.content?.parts
-    ?.map((p: { text?: string }) => p.text ?? '')
-    .join('')
-    .trim();
-  return text || '🤖 (no response from Gemini)';
+  let lastErr: unknown;
+  for (const model of chain) {
+    const url =
+      `https://generativelanguage.googleapis.com/v1beta/models/` +
+      `${model}:generateContent?key=${key}`;
+    try {
+      const { data } = await axios.post(
+        url,
+        {
+          systemInstruction: { parts: [{ text: opts.system ?? DEFAULT_SYSTEM() }] },
+          contents: [{ role: 'user', parts: [{ text: opts.prompt }] }],
+          generationConfig: { maxOutputTokens: MAX_TOKENS },
+        },
+        { headers: { 'Content-Type': 'application/json' }, timeout: REQUEST_TIMEOUT_MS },
+      );
+      const text = data?.candidates?.[0]?.content?.parts
+        ?.map((p: { text?: string }) => p.text ?? '')
+        .join('')
+        .trim();
+      if (text) return text;
+      lastErr = new Error('empty response');
+    } catch (err) {
+      lastErr = err;
+      const status =
+        (err as { response?: { status?: number } })?.response?.status ?? 0;
+      // Only try the next model on congestion/not-found; otherwise stop.
+      if (status !== 503 && status !== 404 && status !== 429) throw err;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error('Gemini unavailable');
 }
 
 /** True when a Groq key is available (Whisper speech-to-text needs it). */
