@@ -127,6 +127,18 @@ export const env = {
   // the bundled local model (needs ~1-2GB RAM).
   removebgApiKey: optional('REMOVEBG_API_KEY', ''),
 
+  // Free Fire player lookup for .ffprofile (optional).
+  // Free key from developers.freefirecommunity.com (register once). Without it
+  // the command falls back to unofficial keyless sources which may be down.
+  freefire: {
+    apiKey: optional('FREEFIRE_API_KEY', ''),
+    // Comma-separated extra keyless base URLs to try as fallback (advanced).
+    fallbackBases: optional(
+      'FREEFIRE_FALLBACK_BASES',
+      'https://free-ff-api-src-5plp.onrender.com',
+    ),
+  },
+
   // Social / growth stats (all optional).
   social: {
     // GitHub repo to track stars/forks (owner/name). No key needed.
