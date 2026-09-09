@@ -5,22 +5,23 @@ import { reply, react } from '../../services/message.service';
  * .predict — daily football match tips (analysis, NOT guaranteed wins).
  *
  * Pulls REAL upcoming fixtures from TheSportsDB (free, keyless) across the top
- * leagues, then produces a stable tip per match (predicted result + confidence
- * + short reason). The same match always gets the same tip (deterministic hash)
- * so it doesn't flip-flop if a user re-runs it.
+ * leagues, then produces a stable tip per match (market pick + fake-but-plausible
+ * odds). Same match always yields the same tip (deterministic hash) so it never
+ * flip-flops when re-run.
  *
+ * Output uses the classic "tipster" format with bold unicode styling.
  * IMPORTANT: framed as tips/analysis with an 18+ / bet-responsibly disclaimer.
- * These are opinions, never a promise of winning.
  */
 
 // League id → display name (TheSportsDB league ids).
 const LEAGUES: Array<{ id: string; name: string }> = [
+  { id: '4480', name: 'Champions League' },
   { id: '4328', name: 'Premier League' },
   { id: '4335', name: 'La Liga' },
   { id: '4332', name: 'Serie A' },
   { id: '4331', name: 'Bundesliga' },
   { id: '4334', name: 'Ligue 1' },
-  { id: '4480', name: 'Champions League' },
+  { id: '4337', name: 'Eredivisie Netherlands' },
 ];
 
 interface Fixture {
@@ -28,12 +29,12 @@ interface Fixture {
   away: string;
   league: string;
   date: string; // YYYY-MM-DD
-  time: string; // HH:MM
+  time: string; // HH:MM (UTC from API)
 }
 
 const predict: Command = {
   name: 'predict',
-  aliases: ['tips', 'predictions', 'betcode', 'sure', 'football', 'games'],
+  aliases: ['tips', 'predictions', 'betcode', 'sure', 'football', 'games', 'odds'],
   category: 'fun',
   description: 'Daily football match tips (analysis only — not guaranteed).',
   usage: 'predict',
@@ -57,42 +58,36 @@ const predict: Command = {
       return;
     }
 
-    // Take 5 games for "today's slip".
     const picks = fixtures.slice(0, 5);
-    const today = new Date().toISOString().slice(0, 10);
-
-    const lines: string[] = [];
-    lines.push('⚽🔥 *VENOM DAILY FOOTBALL TIPS* 🔥⚽');
-    lines.push(`📅 ${today}  •  5 games`);
-    lines.push('━━━━━━━━━━━━━━━━━━');
+    const out: string[] = [];
 
     picks.forEach((f, i) => {
       const p = predictMatch(f);
-      lines.push('');
-      lines.push(`*${i + 1}. ${f.home} vs ${f.away}*`);
-      lines.push(`   🏆 ${f.league}  •  🕒 ${f.date} ${f.time}`);
-      lines.push(`   🎯 Tip: *${p.tip}*`);
-      lines.push(`   📊 Confidence: ${p.confidence}%  ${confBar(p.confidence)}`);
-      lines.push(`   💡 ${p.reason}`);
+      const title =
+        i === 0 ? bold('⚽️ Prediction of the Day ⚽️') : bold(`⚽️ Football Tip ${i + 1} ⚽️`);
+      out.push(title);
+      out.push(`${bold('Date:')} ${fmtDate(f.date)}`);
+      out.push(`${bold('League:')} ${f.league}`);
+      out.push(`${bold('Match:')} ${f.home} - ${f.away}`);
+      out.push(`${bold('Kick off:')} ${toWAT(f.time)} WAT`);
+      out.push(`✅ ${p.tip}`);
+      out.push(`✅ Odds @${p.odds}`);
+      out.push('');
     });
 
-    lines.push('');
-    lines.push('━━━━━━━━━━━━━━━━━━');
-    lines.push('⚠️ _Tips are analysis/opinion, NOT guaranteed. 18+. Bet responsibly — only stake what you can afford to lose._');
-    lines.push('🕷️ VENOM-XMD');
+    out.push('⚠️ _Tips are analysis/opinion, NOT guaranteed. 18+. Bet responsibly._');
+    out.push('🕷️ VENOM-XMD');
 
-    await reply(sock, msg, lines.join('\n'));
+    await reply(sock, msg, out.join('\n'));
     await react(sock, msg, '✅');
   },
 };
 
-/** Fetch upcoming fixtures across leagues; interleave so it's a nice mix. */
+/** Fetch upcoming fixtures across leagues; interleave for a nice mix. */
 async function getUpcomingFixtures(): Promise<Fixture[]> {
   const perLeague: Fixture[][] = await Promise.all(
     LEAGUES.map((lg) => fetchLeague(lg.id, lg.name).catch(() => [])),
   );
-
-  // Interleave leagues (one from each in turn) for variety.
   const mixed: Fixture[] = [];
   let added = true;
   for (let idx = 0; added; idx++) {
@@ -132,48 +127,41 @@ async function fetchLeague(id: string, niceName: string): Promise<Fixture[]> {
 
 interface Prediction {
   tip: string;
-  confidence: number;
-  reason: string;
+  odds: string;
 }
 
 /**
- * Deterministic per-match tip. Uses a stable hash of the fixture so the same
- * match always yields the same tip, blended with a home-advantage bias
- * (home teams win ~45% of the time in top leagues).
+ * Deterministic per-match tip + plausible low odds (safe-ish markets like the
+ * sample: 1X, Over 1.5, Home win, Over 2.5, BTTS). Stable per fixture.
  */
 function predictMatch(f: Fixture): Prediction {
   const h = hash(`${f.home}|${f.away}|${f.date}`);
   const roll = h % 100;
-
-  // Outcome buckets weighted toward home win, then away, then draw/goals.
   let tip: string;
-  let confidence: number;
-  let reason: string;
+  let base: number; // base odds *100
 
-  if (roll < 40) {
-    tip = `${f.home} to win`;
-    confidence = 55 + (h % 25); // 55–79
-    reason = 'Home advantage and stronger recent form at home.';
+  if (roll < 30) {
+    tip = 'Home win';
+    base = 150 + (h % 60); // 1.50–2.09
+  } else if (roll < 50) {
+    tip = '1X (Home or Draw)';
+    base = 120 + (h % 20); // 1.20–1.39
   } else if (roll < 68) {
-    tip = `${f.away} to win`;
-    confidence = 52 + (h % 22); // 52–73
-    reason = 'Away side has the edge in quality and momentum.';
-  } else if (roll < 85) {
-    tip = 'Over 2.5 goals';
-    confidence = 58 + (h % 20); // 58–77
-    reason = 'Both teams scoring freely — expect an open, high-scoring game.';
-  } else if (roll < 94) {
-    tip = 'Both teams to score (BTTS)';
-    confidence = 56 + (h % 18); // 56–73
-    reason = 'Both attacks in form, both defences leaking goals.';
+    tip = 'Over 1.5';
+    base = 118 + (h % 18); // 1.18–1.35
+  } else if (roll < 82) {
+    tip = 'Over 2.5';
+    base = 160 + (h % 45); // 1.60–2.04
+  } else if (roll < 93) {
+    tip = 'BTTS (Both teams to score)';
+    base = 155 + (h % 40); // 1.55–1.94
   } else {
-    tip = 'Draw / Double chance';
-    confidence = 50 + (h % 15); // 50–64
-    reason = 'Evenly matched sides — a tight, cagey contest expected.';
+    tip = 'X2 (Away or Draw)';
+    base = 125 + (h % 25); // 1.25–1.49
   }
 
-  if (confidence > 88) confidence = 88; // never oversell certainty
-  return { tip, confidence, reason };
+  const odds = (base / 100).toFixed(2);
+  return { tip, odds };
 }
 
 /** Small deterministic string hash → unsigned int. */
@@ -186,9 +174,32 @@ function hash(s: string): number {
   return Math.abs(h);
 }
 
-function confBar(pct: number): string {
-  const filled = Math.round((pct / 100) * 5);
-  return '🟩'.repeat(filled) + '⬜'.repeat(5 - filled);
+/** YYYY-MM-DD → DD/MM/YYYY. */
+function fmtDate(iso: string): string {
+  const [y, m, d] = iso.split('-');
+  if (!y || !m || !d) return iso;
+  return `${d}/${m}/${y}`;
+}
+
+/** API time is UTC; WAT is UTC+1. Shift HH:MM by +1 hour. */
+function toWAT(hhmm: string): string {
+  const [h, m] = hhmm.split(':').map((n) => parseInt(n, 10));
+  if (Number.isNaN(h)) return hhmm || '--:--';
+  const wat = (h + 1) % 24;
+  return `${String(wat).padStart(2, '0')}:${String(m || 0).padStart(2, '0')}`;
+}
+
+/** Convert ASCII letters/digits to their bold unicode variants. */
+function bold(s: string): string {
+  let out = '';
+  for (const ch of s) {
+    const code = ch.codePointAt(0)!;
+    if (code >= 65 && code <= 90) out += String.fromCodePoint(0x1d400 + (code - 65)); // A-Z
+    else if (code >= 97 && code <= 122) out += String.fromCodePoint(0x1d41a + (code - 97)); // a-z
+    else if (code >= 48 && code <= 57) out += String.fromCodePoint(0x1d7ce + (code - 48)); // 0-9
+    else out += ch;
+  }
+  return out;
 }
 
 export default predict;
