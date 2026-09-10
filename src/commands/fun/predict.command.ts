@@ -87,7 +87,7 @@ const predict: Command = {
       return;
     }
 
-    const picks = fixtures.slice(0, 5);
+    const picks = pickFive(fixtures);
 
     // Fetch the tables for the leagues we actually need (deduped, cached).
     const neededLeagues = [...new Set(picks.map((f) => f.leagueId))];
@@ -123,6 +123,27 @@ const predict: Command = {
 };
 
 /** Fetch upcoming fixtures across leagues; interleave for a nice mix. */
+/**
+ * Choose 5 games, prioritising TODAY's fixtures (any league). If fewer than 5
+ * games are on today, top up with the soonest upcoming ones so we always return
+ * a full slip. Sorted by date then kickoff time.
+ */
+function pickFive(fixtures: Fixture[]): Fixture[] {
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
+  const byTime = (a: Fixture, b: Fixture) =>
+    a.date === b.date ? a.time.localeCompare(b.time) : a.date.localeCompare(b.date);
+
+  const todays = fixtures.filter((f) => f.date === today).sort(byTime);
+  if (todays.length >= 5) return todays.slice(0, 5);
+
+  // Top up with the soonest games AFTER today (dedup already-picked).
+  const rest = fixtures
+    .filter((f) => f.date > today)
+    .sort(byTime);
+
+  return [...todays, ...rest].slice(0, 5);
+}
+
 async function getUpcomingFixtures(): Promise<Fixture[]> {
   const perLeague: Fixture[][] = await Promise.all(
     LEAGUES.map((lg) => fetchLeagueFixtures(lg.id, lg.name).catch(() => [])),
