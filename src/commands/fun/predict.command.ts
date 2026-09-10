@@ -111,11 +111,10 @@ const predict: Command = {
       out.push(`${bold('Kick off:')} ${toWAT(f.time)} WAT`);
       out.push(`✅ ${p.tip}`);
       out.push(`✅ Odds @${p.odds}`);
-      if (p.note) out.push(`📊 ${p.note}`);
       out.push('');
     });
 
-    out.push('⚠️ _Form-based tips — analysis, NOT guaranteed. 18+. Bet responsibly._');
+    out.push('⚠️ _Tips are analysis/opinion, NOT guaranteed. 18+. Bet responsibly._');
     out.push('🕷️ VENOM-XMD');
 
     await reply(sock, msg, out.join('\n'));
