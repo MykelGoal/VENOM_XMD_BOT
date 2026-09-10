@@ -1,5 +1,18 @@
 import type { Command } from '../../types/command.type';
 import { reply, react } from '../../services/message.service';
+import { env } from '../../config/env';
+
+// API-Football league ids for the leagues we cover, plus the newest season the
+// free plan allows (2022–2024). Used ONLY for standings/form (real, all teams).
+const AF_LEAGUES: Record<string, number> = {
+  '4328': 39, // Premier League
+  '4335': 140, // La Liga
+  '4332': 135, // Serie A
+  '4331': 78, // Bundesliga
+  '4334': 61, // Ligue 1
+};
+const AF_SEASON = 2024; // newest season allowed on the free plan
+const AF_BASE = 'https://v3.football.api-sports.io';
 
 /**
  * .predict — daily football match tips based on REAL team data.
@@ -146,35 +159,79 @@ async function fetchLeagueFixtures(id: string, niceName: string): Promise<Fixtur
 }
 
 /**
- * Fetch a league table keyed by normalised team name. Merges last season's
- * full table (broad coverage) with the current season on top (fresh form), so
- * every team has data even when the new season table is still sparse.
+ * Fetch a full league table keyed by normalised team name.
+ * Primary: API-Football (real standings + form for ALL teams). Falls back to
+ * TheSportsDB (top-5 only) if the key is missing or the request fails.
  */
 async function getTable(leagueId: string): Promise<Record<string, TeamStat>> {
-  const [last, current] = await Promise.all([
-    fetchTable(leagueId, LAST_SEASON).catch(() => ({} as Record<string, TeamStat>)),
-    fetchTable(leagueId, CURRENT_SEASON).catch(() => ({} as Record<string, TeamStat>)),
-  ]);
-  return { ...last, ...current }; // current season overrides last where present
+  const afId = AF_LEAGUES[leagueId];
+  if (afId && env.footballApiKey) {
+    try {
+      const af = await fetchApiFootballTable(afId);
+      if (Object.keys(af).length) return af;
+    } catch {
+      /* fall through to TheSportsDB */
+    }
+  }
+  return fetchSportsDbTable(leagueId).catch(() => ({}));
 }
 
-async function fetchTable(leagueId: string, season: string): Promise<Record<string, TeamStat>> {
-  const url = `https://www.thesportsdb.com/api/v1/json/3/lookuptable.php?l=${leagueId}&s=${season}`;
-  const data = await getJson(url);
-  const rows: any[] = Array.isArray(data?.table) ? data.table : [];
+/** Real full standings + form from API-Football (all teams in the league). */
+async function fetchApiFootballTable(afLeagueId: number): Promise<Record<string, TeamStat>> {
+  const url = `${AF_BASE}/standings?league=${afLeagueId}&season=${AF_SEASON}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  const res = await fetch(url, {
+    headers: { 'x-apisports-key': env.footballApiKey },
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timer));
+  if (!res.ok) throw new Error(`AF HTTP ${res.status}`);
+  const data: any = await res.json();
+  const groups: any[] = data?.response?.[0]?.league?.standings ?? [];
   const map: Record<string, TeamStat> = {};
-  for (const r of rows) {
-    if (!r?.strTeam) continue;
-    map[norm(String(r.strTeam))] = {
-      rank: toInt(r.intRank),
-      points: toInt(r.intPoints),
-      played: toInt(r.intPlayed),
-      form: String(r.strForm || ''),
-      gf: toInt(r.intGoalsFor),
-      ga: toInt(r.intGoalsAgainst),
-    };
+  for (const group of groups) {
+    for (const row of group) {
+      const name = row?.team?.name;
+      if (!name) continue;
+      const all = row?.all ?? {};
+      map[norm(String(name))] = {
+        rank: toInt(row.rank),
+        points: toInt(row.points),
+        played: toInt(all.played),
+        form: String(row.form || ''),
+        gf: toInt(all?.goals?.for),
+        ga: toInt(all?.goals?.against),
+      };
+    }
   }
   return map;
+}
+
+/** Fallback: TheSportsDB (free tier returns only the top few teams). */
+async function fetchSportsDbTable(leagueId: string): Promise<Record<string, TeamStat>> {
+  const seasons = [CURRENT_SEASON, LAST_SEASON];
+  const merged: Record<string, TeamStat> = {};
+  for (const season of seasons) {
+    try {
+      const url = `https://www.thesportsdb.com/api/v1/json/3/lookuptable.php?l=${leagueId}&s=${season}`;
+      const data = await getJson(url);
+      const rows: any[] = Array.isArray(data?.table) ? data.table : [];
+      for (const r of rows) {
+        if (!r?.strTeam) continue;
+        merged[norm(String(r.strTeam))] = {
+          rank: toInt(r.intRank),
+          points: toInt(r.intPoints),
+          played: toInt(r.intPlayed),
+          form: String(r.strForm || ''),
+          gf: toInt(r.intGoalsFor),
+          ga: toInt(r.intGoalsAgainst),
+        };
+      }
+    } catch {
+      /* try next season */
+    }
+  }
+  return merged;
 }
 
 interface Prediction {

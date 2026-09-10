@@ -129,6 +129,12 @@ export const env = {
   // the bundled local model (needs ~1-2GB RAM).
   removebgApiKey: optional('REMOVEBG_API_KEY', ''),
 
+  // Football data for .predict (optional). Free key from dashboard.api-football.com.
+  // Used for full standings + team form. Without it, .predict still works using
+  // TheSportsDB (keyless) but with lighter stats.
+  footballApiKey: optional('FOOTBALL_API_KEY', 'a186339315c2bc0d2935e353f8184073'),
+
+
   // Free Fire player lookup for .ffprofile (optional).
   // Free key from developers.freefirecommunity.com (register once). Without it
   // the command falls back to unofficial keyless sources which may be down.
