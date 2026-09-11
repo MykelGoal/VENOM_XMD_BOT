@@ -122,6 +122,14 @@ async function flw<T = any>(method: 'get' | 'post', path: string, body?: unknown
     const detail = axios.isAxiosError(err)
       ? `${err.response?.status ?? ''} ${
           (err.response?.data as any)?.message ?? err.message
+        }${
+          // FLW sometimes attaches an errors/data object saying exactly which
+          // parameter it hates — surface it so debugging isn't guesswork.
+          (err.response?.data as any)?.errors
+            ? ` ${JSON.stringify((err.response?.data as any).errors).slice(0, 150)}`
+            : (err.response?.data as any)?.data
+              ? ` ${JSON.stringify((err.response?.data as any).data).slice(0, 150)}`
+              : ''
         }`
       : String(err);
     throw new Error(`FLW ${path.split('?')[0]} failed: ${detail}`);
@@ -170,7 +178,9 @@ export async function bundleByCode(network: Network, code: number): Promise<Bund
 /* ────────────────────────── payment links ────────────────────────── */
 
 function txRef(kind: 'fund' | 'data' | 'air', number: string): string {
-  return `VENOM-${kind.toUpperCase()}-${number}-${Date.now()}-${Math.random()
+  // Digits only: Flutterwave rejects special characters (like +) in tx_ref.
+  const n = number.replace(/\D/g, '');
+  return `VENOM-${kind.toUpperCase()}-${n}-${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 6)}`;
 }
@@ -182,14 +192,17 @@ async function createCheckoutLink(opts: {
   description: string;
   number: string;
 }): Promise<string> {
+  const digits = opts.number.replace(/\D/g, ''); // 2348031234567
   const res = await flw('post', '/payments', {
     tx_ref: opts.txRef,
     amount: opts.amountNaira,
     currency: 'NGN',
-    payment_options: 'card,banktransfer,ussd',
+    // Comma + SPACE separated per FLW docs.
+    payment_options: 'card, banktransfer, ussd',
     customer: {
-      email: `${opts.number}@venomxmd.user`,
-      phonenumber: opts.number,
+      // Email is REQUIRED by FLW — user<digits>@ keeps it valid (no leading +).
+      email: `user${digits}@venomxmd.user`,
+      phonenumber: digits,
       name: 'Venom Wallet User',
     },
     customizations: { title: opts.title, description: opts.description },
