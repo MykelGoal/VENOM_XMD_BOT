@@ -158,6 +158,37 @@ export async function toMp3(input: Buffer): Promise<Buffer> {
   return applyAudioFilter(input, 'volume=1.0');
 }
 
+/**
+ * Convert any audio buffer to WhatsApp's NATIVE voice-note format
+ * (OGG/Opus). Voice notes sent as MP3 (audio/mpeg) refuse to play on
+ * many devices — "couldn't be played" — because real voice notes are
+ * Opus. Always wrap TTS/converted audio with this before sending ptt.
+ */
+export async function toVoiceNote(input: Buffer): Promise<Buffer> {
+  const tmp = os.tmpdir();
+  const id = Math.random().toString(36).slice(2);
+  const inPath = path.join(tmp, `${id}.in`);
+  const outPath = path.join(tmp, `${id}.ogg`);
+  await fs.promises.writeFile(inPath, input);
+
+  await new Promise<void>((resolve, reject) => {
+    ffmpeg(inPath)
+      .audioChannels(1)
+      .audioFrequency(24000)
+      .audioBitrate('32k')
+      .toFormat('ogg')
+      .audioCodec('libopus')
+      .on('end', () => resolve())
+      .on('error', reject)
+      .save(outPath);
+  });
+
+  const out = await fs.promises.readFile(outPath);
+  fs.promises.unlink(inPath).catch(() => {});
+  fs.promises.unlink(outPath).catch(() => {});
+  return out;
+}
+
 /** Available image filters powered by sharp. */
 export type ImageFilter =
   | 'greyscale'

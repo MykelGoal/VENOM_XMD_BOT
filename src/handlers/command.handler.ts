@@ -19,6 +19,7 @@ import {
   handlePendingIntentMessage,
 } from '../services/ai-tools.service';
 import { speakText, isSpeakableLength } from '../services/tts.service';
+import { toVoiceNote } from '../services/media.service';
 import { transcribeVoiceNote } from './voice.handler';
 import { userRepo } from '../database/repositories/user.repo';
 import { logger } from '../utils/logger';
@@ -217,9 +218,14 @@ async function aiConverse(
       // Show the human "recording audio…" indicator while we synthesise.
       await sock.sendPresenceUpdate('recording', msg.chat).catch(() => {});
       const speech = await speakText(answer);
+      // Native OGG/Opus — MP3 voice notes won't play on many devices.
       await sock.sendMessage(
         msg.chat,
-        { audio: speech.audio, mimetype: 'audio/mpeg', ptt: true },
+        {
+          audio: await toVoiceNote(speech.audio),
+          mimetype: 'audio/ogg; codecs=opus',
+          ptt: true,
+        },
         { quoted: msg.raw },
       );
       logger.debug(`AI voice reply via ${speech.provider} for ${msg.senderNumber}`);

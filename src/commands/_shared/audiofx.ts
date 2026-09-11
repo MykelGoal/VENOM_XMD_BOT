@@ -1,6 +1,6 @@
 import type { Command } from '../../types/command.type';
 import { reply, react } from '../../services/message.service';
-import { downloadMedia, applyAudioFilter } from '../../services/media.service';
+import { downloadMedia, applyAudioFilter, toVoiceNote } from '../../services/media.service';
 
 interface AudioFxOptions {
   name: string;
@@ -33,9 +33,14 @@ export function makeAudioFx(opts: AudioFxOptions): Command {
       try {
         const audio = await downloadMedia(target.raw);
         const out = await applyAudioFilter(audio, opts.filter);
+        const asNote = Boolean(opts.ptt);
         await sock.sendMessage(
           msg.chat,
-          { audio: out, mimetype: 'audio/mpeg', ptt: opts.ptt ?? false },
+          {
+            audio: asNote ? await toVoiceNote(out) : out,
+            mimetype: asNote ? 'audio/ogg; codecs=opus' : 'audio/mpeg',
+            ptt: asNote,
+          },
           { quoted: msg.raw },
         );
         await react(sock, msg, '✅');

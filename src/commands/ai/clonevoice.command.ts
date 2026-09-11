@@ -3,6 +3,7 @@ import { reply, react } from '../../services/message.service';
 import { downloadMedia, toMp3 } from '../../services/media.service';
 import { cloneVoice, speak, isVoiceConfigured } from '../../services/voice.service';
 import { voiceRepo } from '../../database/repositories/voice.repo';
+import { toVoiceNote } from '../../services/media.service';
 
 /**
  * Clone a voice from a sample and save it for the sender.
@@ -64,7 +65,7 @@ const clonevoice: Command = {
         );
         await sock.sendMessage(
           msg.chat,
-          { audio: sample, mimetype: 'audio/mpeg', ptt: true },
+          { audio: await toVoiceNote(sample), mimetype: 'audio/ogg; codecs=opus', ptt: true },
           { quoted: msg.raw },
         );
       } catch {

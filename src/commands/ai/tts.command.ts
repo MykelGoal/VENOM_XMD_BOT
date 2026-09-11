@@ -3,6 +3,7 @@ import { reply, react } from '../../services/message.service';
 import { speak, isVoiceConfigured } from '../../services/voice.service';
 import { speakText } from '../../services/tts.service';
 import { voiceRepo } from '../../database/repositories/voice.repo';
+import { toVoiceNote } from '../../services/media.service';
 
 /**
  * Text-to-speech. Speaks the given text as a WhatsApp voice note.
@@ -44,7 +45,7 @@ const tts: Command = {
       }
       await sock.sendMessage(
         msg.chat,
-        { audio, mimetype: 'audio/mpeg', ptt: true },
+        { audio: await toVoiceNote(audio), mimetype: 'audio/ogg; codecs=opus', ptt: true },
         { quoted: msg.raw },
       );
       await react(sock, msg, '✅');

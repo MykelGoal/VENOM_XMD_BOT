@@ -25,7 +25,10 @@ import { effectiveAIKey } from './ai.service';
 export type TtsProvider = 'edge' | 'groq' | 'fish';
 
 export interface SpeakResult {
-  /** MP3 audio ready to send as a WhatsApp voice note (ptt). */
+  /**
+   * MP3 audio. Wrap with media.service's toVoiceNote() before sending as a
+   * ptt voice note — MP3 ptt won't play on many devices (needs OGG/Opus).
+   */
   audio: Buffer;
   /** Which provider produced the audio (for logging/diagnostics). */
   provider: TtsProvider;

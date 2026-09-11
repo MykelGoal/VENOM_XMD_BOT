@@ -1,6 +1,6 @@
 import type { Command } from '../../types/command.type';
 import { reply, react } from '../../services/message.service';
-import { downloadMedia, toMp3 } from '../../services/media.service';
+import { downloadMedia, toVoiceNote } from '../../services/media.service';
 
 const tovn: Command = {
   name: 'tovn',
@@ -17,10 +17,10 @@ const tovn: Command = {
     await react(sock, msg, '⏳');
     try {
       const media = await downloadMedia(target.raw);
-      const mp3 = await toMp3(media);
+      const ogg = await toVoiceNote(media);
       await sock.sendMessage(
         msg.chat,
-        { audio: mp3, mimetype: 'audio/mpeg', ptt: true },
+        { audio: ogg, mimetype: 'audio/ogg; codecs=opus', ptt: true },
         { quoted: msg.raw },
       );
       await react(sock, msg, '✅');
