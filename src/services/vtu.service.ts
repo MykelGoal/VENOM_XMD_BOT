@@ -177,6 +177,19 @@ export async function bundleByCode(network: Network, code: number): Promise<Bund
 
 /* ────────────────────────── payment links ────────────────────────── */
 
+/**
+ * The bot's own WhatsApp number (digits), wired from connection.ts at boot.
+ * Used as the payment redirect: after paying, the customer's browser opens
+ * WhatsApp straight back into the bot chat where their receipt lands.
+ */
+let botPhoneDigits = '';
+
+/** Called from connection.ts once the socket knows its own JID. */
+export function setVtuBotPhone(jid: string): void {
+  // "2348031234567:12@s.whatsapp.net" → "2348031234567"
+  botPhoneDigits = jid.split('@')[0].split(':')[0].replace(/\D/g, '');
+}
+
 function txRef(kind: 'fund' | 'data' | 'air', number: string): string {
   // Digits only: Flutterwave rejects special characters (like +) in tx_ref.
   const n = number.replace(/\D/g, '');
@@ -193,15 +206,29 @@ async function createCheckoutLink(opts: {
   number: string;
 }): Promise<string> {
   const digits = opts.number.replace(/\D/g, ''); // 2348031234567
+  // Flutterwave requires a syntactically valid email; the session site's real
+  // host keeps strict validators happy (no mailbox is ever read).
+  const emailHost = (() => {
+    try {
+      return new URL(env.session.siteUrl).host;
+    } catch {
+      return 'session-site-2odn.onrender.com';
+    }
+  })();
   const res = await flw('post', '/payments', {
     tx_ref: opts.txRef,
     amount: opts.amountNaira,
     currency: 'NGN',
+    // REQUIRED in practice (FLW returns 400 "One or more required parameters
+    // missing" without it) even though the docs don't mark it so.
+    redirect_url: botPhoneDigits
+      ? `https://wa.me/${botPhoneDigits}`
+      : env.session.siteUrl,
     // Comma + SPACE separated per FLW docs.
     payment_options: 'card, banktransfer, ussd',
     customer: {
       // Email is REQUIRED by FLW — user<digits>@ keeps it valid (no leading +).
-      email: `user${digits}@venomxmd.user`,
+      email: `user${digits}@${emailHost}`,
       phonenumber: digits,
       name: 'Venom Wallet User',
     },

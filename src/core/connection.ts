@@ -9,7 +9,7 @@ import { logger } from '../utils/logger';
 import { sleep } from '../utils/helpers';
 import { createClient } from './client';
 import { registerEventHandlers } from '../handlers/event.handler';
-import { registerVtuNotifier, resumePendingVtu } from '../services/vtu.service';
+import { registerVtuNotifier, resumePendingVtu, setVtuBotPhone } from '../services/vtu.service';
 import { sendText } from '../services/message.service';
 import { syncSessionToCloud } from './session';
 
@@ -35,6 +35,10 @@ export async function startConnection(): Promise<void> {
   // Give the VTU payment poller a way to message users proactively
   // ("✅ your wallet don credit") without an active command.
   registerVtuNotifier((jid, text) => sendText(sock, jid, text));
+
+  // Remember our own number so payment redirects (wa.me) land the customer
+  // back in this chat after paying.
+  setVtuBotPhone(sock.user?.id ?? '');
 
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
