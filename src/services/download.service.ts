@@ -10,7 +10,11 @@
  *   - apis.davidcyriltech.my.id/download/*    → ytmp3, ytmp4, apk
  *   - apis.davidcyriltech.my.id/facebook      → facebook video
  *   - apis.davidcyriltech.my.id/spotifydl     → spotify track download
+ *   - apis.davidcyriltech.my.id/lyrics?t=&a=  → lyrics (title AND artist, separate params)
  *   - tikwm.com/api                           → tiktok (no watermark)
+ *
+ * Known unreliable: lyrist.vercel.app now sits behind a Vercel security
+ * checkpoint from most server IPs, so it is only used as a last resort.
  */
 import axios from 'axios';
 import yts from 'yt-search';
@@ -195,20 +199,160 @@ export async function apk(query: string): Promise<ApkResult> {
 
 /** ────────────────────────── Lyrics ────────────────────────── */
 
-export async function lyrics(
-  title: string,
-): Promise<{ title: string; artist: string; lyrics: string }> {
-  // Primary: lyrist; fallback: davidcyriltech
+export interface LyricsResult {
+  title: string;
+  artist: string;
+  lyrics: string;
+}
+
+/**
+ * Split a query containing an explicit song/artist separator.
+ * Understands "song - artist", "artist - song", "song | artist",
+ * "song, artist" and "song: artist" (dash/pipe must be space-spaced).
+ * Returns null when no separator is present.
+ */
+function splitSongQuery(q: string): [string, string] | null {
+  const patterns = [
+    /^(.+?)\s+[-–—|]\s+(.+)$/, // "song - artist" / "song | artist"
+    /^(.+?)\s*[:,]\s+(.+)$/, // "song, artist" / "song: artist"
+  ];
+  for (const re of patterns) {
+    const m = q.match(re);
+    if (m && m[1]?.trim() && m[2]?.trim()) return [m[1].trim(), m[2].trim()];
+  }
+  return null;
+}
+
+/**
+ * Resolve a free-text query (e.g. "faded alan walker") into song/artist
+ * candidates using YouTube search metadata — video titles there are almost
+ * always "Artist - Song", and auto-generated channels are "Artist - Topic".
+ */
+async function resolveSongQuery(
+  query: string,
+): Promise<{ title: string; artist: string }[]> {
+  const out: { title: string; artist: string }[] = [];
   try {
-    const d = await getJson(`https://lyrist.vercel.app/api/${encodeURIComponent(title)}`);
-    if (d?.lyrics) return { title: d.title || title, artist: d.artist || '', lyrics: d.lyrics };
+    for (const v of await ytSearch(query, 5)) {
+      const channelArtist = v.author.replace(/\s*-\s*Topic$/i, '').trim();
+      // Drop bracketed release noise: "(Official Video)", "[Lyrics]", "(feat. …)"
+      const raw = v.title
+        .replace(
+          /\((?:[^()]*(?:official|video|audio|lyrics?|hd|4k|mv|visuali[sz]er|remaster|feat\.?|featuring)[^()]*)\)/gi,
+          ' ',
+        )
+        .replace(
+          /\[(?:[^\][]*(?:official|video|audio|lyrics?|hd|4k|mv|visuali[sz]er|remaster|feat\.?|featuring)[^\][]*)\]/gi,
+          ' ',
+        )
+        .replace(/\s*\b(lyrics?|lyric video|1\s*hour(?:\s*version)?|full song)\s*$/i, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!raw) continue;
+      const parts = raw.split(/\s+[-–—]\s+/);
+      if (parts.length >= 2 && parts[0].trim()) {
+        out.push({ title: parts.slice(1).join(' - ').trim(), artist: parts[0].trim() });
+      } else if (channelArtist) {
+        out.push({ title: raw, artist: channelArtist });
+      }
+    }
+  } catch {
+    /* YouTube unreachable — caller falls back to its other candidates */
+  }
+  return out;
+}
+
+/** David Cyril lyrics API — requires the song title and artist as separate params. */
+async function dcLyrics(title: string, artist: string): Promise<LyricsResult | null> {
+  try {
+    const d = await getJson(
+      `${DC}/lyrics?t=${encodeURIComponent(title)}&a=${encodeURIComponent(artist)}`,
+    );
+    const r = d?.result || d;
+    if (r?.lyrics) {
+      return { title: r.title || title, artist: r.artist || artist, lyrics: r.lyrics };
+    }
+  } catch {
+    /* no match or provider hiccup — caller tries the next candidate */
+  }
+  return null;
+}
+
+/**
+ * Guard against fuzzy searches silently returning a *different* song than
+ * the one asked for: accept only if a meaningful query word appears in the
+ * result title, or every meaningful query word appears in the artist name
+ * (so "lyrics alan walker" still resolves to a song by Alan Walker).
+ */
+function isRelevantMatch(query: string, result: { title: string; artist: string }): boolean {
+  const GENERIC = new Set([
+    'the', 'and', 'for', 'you', 'song', 'songs', 'lyrics', 'lyric',
+    'official', 'video', 'audio', 'music', 'full', 'version', 'feat', 'new',
+  ]);
+  const words = (query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []).filter(
+    (w) => !GENERIC.has(w),
+  );
+  if (!words.length) return true;
+  const title = result.title.toLowerCase();
+  const artist = result.artist.toLowerCase();
+  if (words.some((w) => title.includes(w))) return true;
+  return words.every((w) => artist.includes(w));
+}
+
+export async function lyrics(query: string): Promise<LyricsResult> {
+  const q = query.trim();
+  if (!q) throw new Error('Empty lyrics query');
+
+  // Candidate (title, artist) pairs, most promising first.
+  const pairs: { title: string; artist: string }[] = [];
+  const seen = new Set<string>();
+  const add = (title: string, artist: string) => {
+    const key = `${title}||${artist}`.toLowerCase();
+    if (title && artist && !seen.has(key)) {
+      seen.add(key);
+      pairs.push({ title, artist });
+    }
+  };
+
+  // 1) Explicit separator in the query — try both orders, since people type
+  //    both "song - artist" and "artist - song".
+  const split = splitSongQuery(q);
+  if (split) {
+    add(split[0], split[1]);
+    add(split[1], split[0]);
+  }
+
+  // 2) No separator (e.g. "faded alan walker") — resolve via YouTube
+  //    search metadata, which knows the real title and artist.
+  if (!split) {
+    for (const c of await resolveSongQuery(q)) add(c.title, c.artist);
+  }
+
+  for (const p of pairs) {
+    const r = await dcLyrics(p.title, p.artist);
+    if (r && isRelevantMatch(q, r)) return r;
+  }
+
+  // 3) Separator was present but both orders failed — let YouTube resolve it.
+  if (split) {
+    for (const c of await resolveSongQuery(q)) {
+      const r = await dcLyrics(c.title, c.artist);
+      if (r && isRelevantMatch(q, r)) return r;
+    }
+  }
+
+  // 4) Last resort: lyrist's fuzzy single-segment search. Frequently behind
+  //    a Vercel security checkpoint from datacenter IPs, hence kept last.
+  try {
+    const d = await getJson(`https://lyrist.vercel.app/api/${encodeURIComponent(q)}`);
+    if (d?.lyrics && isRelevantMatch(q, { title: d.title || q, artist: d.artist || '' })) {
+      return { title: d.title || q, artist: d.artist || '', lyrics: d.lyrics };
+    }
   } catch {
     /* fall through */
   }
-  const d = await getJson(`${DC}/lyrics?title=${encodeURIComponent(title)}`);
-  const r = d?.result || d;
-  if (!r?.lyrics) throw new Error('lyrics not found');
-  return { title: r.title || title, artist: r.artist || '', lyrics: r.lyrics };
+
+  throw new Error('lyrics not found');
 }
 
 /** ────────────────────────── helpers ────────────────────────── */

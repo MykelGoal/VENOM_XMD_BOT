@@ -7,10 +7,14 @@ const lyricsCmd: Command = {
   aliases: ['lyric', 'lyr'],
   category: 'downloader',
   description: 'Fetch the lyrics of a song.',
-  usage: 'lyrics <song title>',
+  usage: 'lyrics <song title> [ - <artist>]',
   async run({ sock, msg, text }) {
     if (!text) {
-      await reply(sock, msg, 'ℹ️ Usage: *lyrics <song title>*\n\nExample: _lyrics faded alan walker_');
+      await reply(
+        sock,
+        msg,
+        'ℹ️ Usage: *lyrics <song title>*\n\nExamples:\n• _lyrics faded alan walker_\n• _lyrics faded - alan walker_',
+      );
       return;
     }
     await react(sock, msg, '🔎');
@@ -26,7 +30,11 @@ const lyricsCmd: Command = {
       await react(sock, msg, '✅');
     } catch {
       await react(sock, msg, '❌');
-      await reply(sock, msg, `❌ No lyrics found for "${text}".`);
+      await reply(
+        sock,
+        msg,
+        `❌ No lyrics found for "${text}".\n\n💡 Tip: _lyrics <song> - <artist>_ gives the best match, e.g. _lyrics faded - alan walker_.`,
+      );
     }
   },
 };
