@@ -6,11 +6,11 @@
 
 # 🕷️ VENOM-XMD
 
-**Multi-device WhatsApp bot · 392 commands · [Baileys](https://github.com/WhiskeySockets/Baileys) + TypeScript**
+**Multi-device WhatsApp bot · 398 commands · [Baileys](https://github.com/WhiskeySockets/Baileys) + TypeScript**
 
 <br/>
 
-<img src="https://img.shields.io/badge/commands-392-39ff88?style=for-the-badge&labelColor=050806" alt="commands"/>
+<img src="https://img.shields.io/badge/commands-398-39ff88?style=for-the-badge&labelColor=050806" alt="commands"/>
 <img src="https://img.shields.io/badge/language-TypeScript-3178c6?style=for-the-badge&labelColor=050806" alt="typescript"/>
 <img src="https://img.shields.io/badge/baileys-multi--device-00d95f?style=for-the-badge&labelColor=050806" alt="baileys"/>
 <img src="https://img.shields.io/badge/node-%E2%89%A520-39ff88?style=for-the-badge&labelColor=050806" alt="node"/>
@@ -69,9 +69,36 @@
 
 **Send <kbd>.menu</kbd> — then try <kbd>.ai</kbd> <kbd>.play</kbd> <kbd>.sticker</kbd> <kbd>.weather</kbd> <kbd>.waifu</kbd>**
 
-**392 commands. One menu. 🎉**
+**398 commands. One menu. 🎉**
 
 </div>
+
+---
+
+## 💳 VTU — sell data & airtime (optional, owner-activated)
+
+Turn the bot into a mini VTU shop with **your own** [Flutterwave](https://flutterwave.com) account (free). One command to activate:
+
+```
+.setkey flutterwave FLWSECK-xxxxxxxxxxxxxxxx
+```
+
+The key is stored in the bot's private database — it never touches the repo. (Prefer env? `FLW_SECRET_KEY` works too.)
+
+| Users | Owner |
+|:------|:------|
+| `.data [mtn\|glo\|airtel\|9mobile]` — browse bundles + prices | `.vtu` — status: mode, Flutterwave balance, wallets, sales |
+| `.buydata <net> <code> [phone]` — instant from wallet, or a payment link | `.vtu margin <5>` — set your data markup % (default 3) |
+| `.airtime <100-20000> [phone]` — airtime at face value | `.setkey remove flutterwave` — deactivate |
+
+**How the money works** 🇳🇬
+
+- Payment links (card / bank transfer / USSD) via Flutterwave; the bot verifies every payment with Flutterwave itself before delivering — never a screenshot.
+- `.fund <amount>` tops up a user's wallet; wallet balance buys are instant.
+- Data sells at Flutterwave price **+ your margin** (default 3%, rounded up to ₦5); airtime sells at face value.
+- Every kobo is tracked in an append-only ledger — wallets survive restarts, failed deliveries auto-refund, and duplicate payment notifications can never double-credit.
+
+*Note (merchant mode): Flutterwave charges bills to your Flutterwave balance, so keep it funded — check it anytime with `.vtu`.*
 
 ---
 

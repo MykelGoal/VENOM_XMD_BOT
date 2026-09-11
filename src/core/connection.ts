@@ -9,6 +9,8 @@ import { logger } from '../utils/logger';
 import { sleep } from '../utils/helpers';
 import { createClient } from './client';
 import { registerEventHandlers } from '../handlers/event.handler';
+import { registerVtuNotifier, resumePendingVtu } from '../services/vtu.service';
+import { sendText } from '../services/message.service';
 import { syncSessionToCloud } from './session';
 
 let pairingRequested = false;
@@ -29,6 +31,10 @@ export async function startConnection(): Promise<void> {
 
   // Wire all app-level event handlers (messages, groups, etc.).
   registerEventHandlers(sock);
+
+  // Give the VTU payment poller a way to message users proactively
+  // ("✅ your wallet don credit") without an active command.
+  registerVtuNotifier((jid, text) => sendText(sock, jid, text));
 
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
@@ -55,6 +61,10 @@ export async function startConnection(): Promise<void> {
       logger.info(`✅ ${env.botName} connected as ${sock.user?.id}`);
       await sendStartupMessage(sock);
       await onFirstConnect(sock);
+
+      // Resume watching any payments that were pending before a restart —
+      // money must never get lost to a redeploy.
+      resumePendingVtu();
     }
 
     // ── Closed / reconnect logic ──────────────────────────────

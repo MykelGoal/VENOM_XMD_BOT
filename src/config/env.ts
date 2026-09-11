@@ -159,6 +159,23 @@ export const env = {
     shards: num('MEMORY_SHARDS', 1),
   },
 
+  // VTU (data & airtime) sales. Two modes:
+  //   merchant — the deployer's OWN Flutterwave account (secret key set
+  //              via `.setkey flutterwave` or FLW_SECRET_KEY env). Their
+  //              money, their margin, their business.
+  //   gateway  — a central Venom Gateway server (Phase B) that holds its
+  //              own Flutterwave keys; deployers just point at it.
+  //              (VTU_GATEWAY_URL + VTU_GATEWAY_KEY).
+  // Keys are NEVER hardcoded — always env vars or .setkey.
+  vtu: {
+    flwSecret: optional('FLW_SECRET_KEY', ''),
+    flwBaseUrl: optional('FLW_BASE_URL', 'https://api.flutterwave.com/v3'),
+    gatewayUrl: optional('VTU_GATEWAY_URL', ''),
+    gatewayKey: optional('VTU_GATEWAY_KEY', ''),
+    // Default markup on data bundles (owner can change live with .vtu margin).
+    marginPct: num('VTU_MARGIN', 3),
+  },
+
   // remove.bg API key for .nobg background removal (optional).
   // Free key (50 images/mo) at remove.bg — recommended on low-RAM free hosts
   // where the local ONNX model gets OOM-killed. If unset, .nobg falls back to

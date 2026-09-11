@@ -17,6 +17,7 @@ import {
   saveHostEnvVar,
 } from '../../services/host.service';
 import { env } from '../../config';
+import { settingsRepo } from '../../database/repositories/settings.repo';
 
 /**
  * Owner command to set AI provider API keys at runtime — no host dashboard,
@@ -37,6 +38,8 @@ const KEY_PREFIX: Record<string, string[]> = {
   openrouter: ['sk-or-'],
   groq: ['gsk_'],
   openai: ['sk-'],
+  // VTU (Flutterwave) — merchant mode for data/airtime sales.
+  flutterwave: ['FLWSECK'],
 };
 
 const HELP = [
@@ -47,7 +50,7 @@ const HELP = [
   '• `.setkey list` — show providers (masked)',
   '• `.setkey remove <provider>` — remove a stored key',
   '',
-  '*Providers:* deepseek · gemini · openrouter · groq · openai',
+  '*Providers:* deepseek · gemini · openrouter · groq · openai · flutterwave (VTU)',
   '',
   '_Example:_ `.setkey gemini AIzaSyD...`',
   '_Takes effect immediately. Runtime keys override env vars._',
@@ -84,6 +87,14 @@ const setkey: Command = {
         `🔁 Fallback order: ${env.ai.order.join(' → ')}`,
         `✅ Active: ${active.length ? active.join(' → ') : 'none yet'}`,
         '',
+        `💳 Flutterwave (VTU): ${
+          settingsRepo.get('vtu.flwsecret')
+            ? '🟢 key set (merchant mode)'
+            : env.vtu.flwSecret
+              ? '🟢 from env'
+              : '⚪ no key'
+        }`,
+        '',
         '_Set one with_ `.setkey <provider> <key>`',
       ];
       await reply(sock, msg, lines.join('\n'));
@@ -93,6 +104,20 @@ const setkey: Command = {
     // ── .setkey remove <provider> ────────────────────────────
     if (sub === 'remove' || sub === 'delete' || sub === 'del') {
       const provider = (args[1] ?? '').toLowerCase();
+
+      // VTU (Flutterwave) — stored under its own settings key.
+      if (provider === 'flutterwave') {
+        const had = Boolean(settingsRepo.get('vtu.flwsecret'));
+        settingsRepo.set('vtu.flwsecret', '');
+        await reply(
+          sock,
+          msg,
+          had
+            ? '🗑️ Removed the *Flutterwave* key. VTU sales are now off (unless FLW_SECRET_KEY is set in env).'
+            : 'ℹ️ No Flutterwave key was stored.',
+        );
+        return;
+      }
       if (!AI_PROVIDER_NAMES.includes(provider)) {
         await reply(
           sock,
@@ -156,6 +181,42 @@ const setkey: Command = {
 
     // ── .setkey <provider> <key> ─────────────────────────────
     const provider = sub;
+
+    // VTU (Flutterwave) merchant mode — the deployer's own payment account.
+    // Stored under 'vtu.flwsecret'; NEVER hardcoded in the repo.
+    if (provider === 'flutterwave') {
+      const key = args[1] ?? '';
+      if (!key || args.length > 2) {
+        await reply(sock, msg, 'ℹ️ Usage: *setkey flutterwave FLWSECK-xxxxxxxx*');
+        return;
+      }
+      if (!key.startsWith('FLWSECK')) {
+        await reply(
+          sock,
+          msg,
+          '⚠️ That no look like a Flutterwave *secret* key — dem start with *FLWSECK-*. (The FLWPUBK- one na public key, e no fit power sales.)',
+        );
+        return;
+      }
+      settingsRepo.set('vtu.flwsecret', key);
+
+      // Best-effort: delete the owner's message so the raw key doesn't linger.
+      try {
+        await sock.sendMessage(msg.chat, { delete: msg.raw.key });
+      } catch {
+        /* non-fatal */
+      }
+
+      await reply(
+        sock,
+        msg,
+        '✅ *Flutterwave* key saved — VTU is LIVE in merchant mode!\n\n' +
+          'Try: *.data mtn* to see bundles, *.fund 500* to test your checkout.\n\n' +
+          '_Note: test keys (…-X) work for testing the flow only; set your LIVE key the same way when ready._',
+      );
+      return;
+    }
+
     if (!AI_PROVIDER_NAMES.includes(provider)) {
       await reply(
         sock,
