@@ -4,6 +4,7 @@ import { installGlobalErrorHandlers } from './handlers/error.handler';
 import { startConnection } from './core/connection';
 import { restoreSessionFromEnv } from './core/session';
 import { startKeepAlive } from './core/keepalive';
+import { startMemorySync } from './services/memorysync.service';
 
 const BANNER = `
 ╭──────────────────────────────╮
@@ -33,6 +34,10 @@ async function main(): Promise<void> {
 
   // If SESSION_ID is set, restore creds before connecting (skips QR/pairing).
   await restoreSessionFromEnv();
+
+  // Optional: hydrate AI conversation memory from the remote store and keep
+  // it synced (no-op unless the owner set MEMORY_URL).
+  startMemorySync();
 
   await startConnection();
 }

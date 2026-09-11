@@ -147,6 +147,18 @@ export const env = {
     maxSpeakChars: num('AI_TTS_MAX_CHARS', 600),
   },
 
+  // AI conversation memory (chatmemory). The bounded local store is always
+  // on; MEMORY_URL additionally syncs memory to a free no-signup remote
+  // store (encrypted) so the bot remembers across redeploys on ephemeral
+  // free hosts:
+  //   MEMORY_URL=mantle:auto → MantleDB namespace derived from SESSION_ID
+  //   MEMORY_URL=mantle:<ns> → explicit namespace
+  //   MEMORY_SHARDS=N       → shard chats across N namespaces (capacity ×N)
+  memory: {
+    syncUrl: optional('MEMORY_URL', ''),
+    shards: num('MEMORY_SHARDS', 1),
+  },
+
   // remove.bg API key for .nobg background removal (optional).
   // Free key (50 images/mo) at remove.bg — recommended on low-RAM free hosts
   // where the local ONNX model gets OOM-killed. If unset, .nobg falls back to

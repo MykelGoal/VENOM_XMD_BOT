@@ -57,6 +57,8 @@
 | `SESSION_ID` | `VENOM-XXXX-XXXX` | from the [session site](https://session-site-2odn.onrender.com) |
 | `OWNER_NUMBER` | `2348012345678` | your number, no `+` |
 
+*Optional:* `MEMORY_URL=mantle:auto` — the AI remembers chats **across redeploys** (free, no signup, AES-256 encrypted; `.aimemory clear` to forget).
+
 </div>
 
 ## ③ 💬 Use

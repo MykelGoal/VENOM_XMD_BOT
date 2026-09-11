@@ -25,6 +25,8 @@ import { toWhatsApp } from '../utils/waformat';
 export interface AIReplyOptions {
   prompt: string;
   system?: string;
+  /** Recent conversation turns (oldest → newest) so the AI has context. */
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
 }
 
 // The Venom Brain — full identity, knowledge & personality (see venom-brain.ts).
@@ -296,6 +298,7 @@ async function openAICompatible(
       model: cfg.model,
       messages: [
         { role: 'system', content: opts.system ?? DEFAULT_SYSTEM() },
+        ...(opts.history ?? []).map((t) => ({ role: t.role, content: t.content })),
         { role: 'user', content: opts.prompt },
       ],
       temperature: 0.7,
@@ -335,7 +338,13 @@ async function geminiReply(opts: AIReplyOptions): Promise<string> {
         url,
         {
           systemInstruction: { parts: [{ text: opts.system ?? DEFAULT_SYSTEM() }] },
-          contents: [{ role: 'user', parts: [{ text: opts.prompt }] }],
+          contents: [
+            ...(opts.history ?? []).map((t) => ({
+              role: t.role === 'assistant' ? 'model' : 'user',
+              parts: [{ text: t.content }],
+            })),
+            { role: 'user', parts: [{ text: opts.prompt }] },
+          ],
           generationConfig: { maxOutputTokens: MAX_TOKENS },
         },
         { headers: { 'Content-Type': 'application/json' }, timeout: REQUEST_TIMEOUT_MS },

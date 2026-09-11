@@ -42,3 +42,13 @@ export function voiceReplyMode(): 'off' | 'voice' | 'all' {
   const v = settingsRepo.get('aivoice') || 'voice';
   return v === 'all' || v === 'voice' ? v : 'off';
 }
+
+/**
+ * AI conversation memory toggle (owner toggles with `.aimemory on|off`).
+ * Default ON — the bot remembers the last few turns of each chat (bounded,
+ * ~24h, see chatmemory.repo). Users can always clear their own chat with
+ * `.aimemory clear`.
+ */
+export function memoryEnabled(): boolean {
+  return (settingsRepo.get('aimemory') || 'on') !== 'off';
+}

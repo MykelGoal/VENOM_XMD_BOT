@@ -6,9 +6,10 @@ import { commands, loadCommands } from '../commands';
 import { checkCooldown } from '../middleware/cooldown';
 import { isBanned } from '../middleware/ban';
 import { isOwner, isSudo, isGroupAdmin } from '../middleware/permission';
-import { aiModeWantsReply, voiceReplyMode } from '../middleware/aimode';
+import { aiModeWantsReply, voiceReplyMode, memoryEnabled } from '../middleware/aimode';
 import { settingsRepo } from '../database/repositories/settings.repo';
 import { accessRepo } from '../database/repositories/access.repo';
+import { chatMemoryRepo } from '../database/repositories/chatmemory.repo';
 import { reply, react } from '../services/message.service';
 import { getAIReply, isTranscriptionConfigured } from '../services/ai.service';
 import { speakText, isSpeakableLength } from '../services/tts.service';
@@ -177,9 +178,16 @@ async function aiConverse(
   prompt: string,
   incomingWasVoice: boolean,
 ): Promise<void> {
+  // Recent turns so the AI remembers the conversation (owner: .aimemory).
+  const remember = memoryEnabled();
+  const history = remember ? chatMemoryRepo.history(msg.chat) : [];
+
   await sock.sendPresenceUpdate('composing', msg.chat).catch(() => {});
-  const answer = await getAIReply({ prompt });
+  const answer = await getAIReply({ prompt, history });
   await sock.sendPresenceUpdate('paused', msg.chat).catch(() => {});
+
+  // Record the turn (bounded: 16 messages/chat, 24h TTL).
+  if (remember) chatMemoryRepo.record(msg.chat, prompt, answer);
 
   const mode = voiceReplyMode();
   const wantVoice =
