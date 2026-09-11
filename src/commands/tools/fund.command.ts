@@ -3,7 +3,7 @@ import { reply, react } from '../../services/message.service';
 import { vtuUnavailable, initFund, naira } from '../../services/vtu.service';
 
 /**
- * Fund your Venom wallet via Flutterwave (card / bank transfer / USSD).
+ * Fund your Venom wallet via Flutterwave (bank transfer).
  *   .fund 2000 → payment link → wallet credits automatically on payment.
  * The bot watches the payment and messages you the moment it clears.
  */
@@ -33,7 +33,7 @@ const fund: Command = {
         sock,
         msg,
         `💰 *Wallet Top-up — ${naira(Math.round(amount * 100))}*\n\n` +
-          `Pay here (card / bank transfer / USSD):\n${link}\n\n` +
+          `Pay here (bank transfer):\n${link}\n\n` +
           `_The moment payment clear, your wallet go credit automatically — I dey watch am._ 👀`,
       );
     } catch (err) {

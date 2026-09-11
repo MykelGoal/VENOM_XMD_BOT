@@ -251,7 +251,7 @@ export function buildAITools(): ToolDef[] {
       {
         name: 'fund_wallet',
         description:
-          "Create a Flutterwave payment link so the user can top up their wallet (card / bank transfer / USSD). The wallet credits automatically when payment clears. Safe to run directly — no money moves yet.",
+          "Create a Flutterwave payment link so the user can top up their wallet (bank transfer). The wallet credits automatically when payment clears. Safe to run directly — no money moves yet.",
         parameters: {
           type: 'object',
           properties: {

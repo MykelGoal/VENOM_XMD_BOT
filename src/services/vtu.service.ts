@@ -224,8 +224,8 @@ async function createCheckoutLink(opts: {
     redirect_url: botPhoneDigits
       ? `https://wa.me/${botPhoneDigits}`
       : env.session.siteUrl,
-    // Comma + SPACE separated per FLW docs.
-    payment_options: 'card, banktransfer, ussd',
+    // Bank transfer only — that's how Nigerians pay (owner's call).
+    payment_options: 'banktransfer',
     customer: {
       // Email is REQUIRED by FLW — user<digits>@ keeps it valid (no leading +).
       email: `user${digits}@${emailHost}`,
