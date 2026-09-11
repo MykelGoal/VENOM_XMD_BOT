@@ -282,7 +282,188 @@ export async function getAIReply(opts: AIReplyOptions): Promise<string> {
   );
 }
 
-/** Call any OpenAI-compatible /chat/completions endpoint. */
+/* ─── AI 2.0: tool use (function calling) ────────────────────────────────
+ * Lets the AI ACT, not just talk: it can call bot tools (run commands,
+ * check wallets, propose purchases…) mid-conversation. Any provider that
+ * speaks the OpenAI /chat/completions format supports this — which is all
+ * five (Gemini goes through its official OpenAI-compatible endpoint).
+ */
+
+/** A tool (function) the model may call, with a JSON Schema for its args. */
+export interface ToolDef {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+
+/** Executes one tool call and returns a text result for the model. */
+export type ToolExecutor = (
+  name: string,
+  args: Record<string, unknown>,
+) => Promise<string>;
+
+export interface AIToolOptions extends AIReplyOptions {
+  tools: ToolDef[];
+  execute: ToolExecutor;
+  /** Extra system instructions appended when tools are active. */
+  toolsSystem?: string;
+}
+
+const MAX_TOOL_ROUNDS = 4;
+
+/** Provider transport config for a tools-capable chat call. */
+function toolChatCfg(provider: string): {
+  apiKey: string;
+  model: string;
+  baseUrl: string;
+  extraHeaders?: Record<string, string>;
+} | null {
+  switch (provider) {
+    case 'deepseek':
+      return {
+        apiKey: effectiveAIKey('deepseek'),
+        model: effectiveAIModel('deepseek'),
+        baseUrl: env.ai.deepseek.baseUrl,
+      };
+    case 'openrouter':
+      return {
+        apiKey: effectiveAIKey('openrouter'),
+        model: effectiveAIModel('openrouter'),
+        baseUrl: env.ai.openrouter.baseUrl,
+        extraHeaders: {
+          'HTTP-Referer': 'https://github.com/MykelGoal/VENOM_XMD_BOT',
+          'X-Title': env.botName,
+        },
+      };
+    case 'groq':
+      return {
+        apiKey: effectiveAIKey('groq'),
+        model: effectiveAIModel('groq'),
+        baseUrl: env.ai.groq.baseUrl,
+      };
+    case 'openai':
+      return {
+        apiKey: effectiveAIKey('openai'),
+        model: effectiveAIModel('openai'),
+        baseUrl: env.ai.baseUrl,
+      };
+    case 'gemini':
+      // Gemini's official OpenAI-compatible endpoint — same key, same model
+      // names, full tools support. Keeps ONE tool format for all providers.
+      return {
+        apiKey: effectiveAIKey('gemini'),
+        model: effectiveAIModel('gemini'),
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+      };
+    default:
+      return null;
+  }
+}
+
+/**
+ * AI reply WITH tools: sends the conversation + tool definitions, executes
+ * any tool_calls the model makes, feeds results back, and returns the final
+ * text. Falls back to a plain (tool-less) reply if every provider fails —
+ * the user always gets an answer.
+ */
+export async function getAIReplyWithTools(
+  opts: AIToolOptions,
+): Promise<string> {
+  const providers = activeProviders();
+  if (providers.length === 0) return getAIReply(opts); // "not configured" msg
+
+  for (const p of providers) {
+    const cfg = toolChatCfg(p.name);
+    if (!cfg?.apiKey || !cfg.model) continue;
+    try {
+      const answer = await chatWithToolLoop(cfg, opts);
+      if (answer && answer.trim()) return toWhatsApp(answer.trim());
+    } catch (err) {
+      logger.warn(
+        `AI tools provider "${p.name}" failed → ${String((err as Error).message).slice(0, 200)}`,
+      );
+      // fall through to the next provider
+    }
+  }
+  return getAIReply(opts); // graceful degrade — plain reply, no tools
+}
+
+/** One provider's tool loop: chat → tool_calls → execute → chat → answer. */
+async function chatWithToolLoop(
+  cfg: { apiKey: string; model: string; baseUrl: string; extraHeaders?: Record<string, string> },
+  opts: AIToolOptions,
+): Promise<string> {
+  const system = `${opts.system ?? DEFAULT_SYSTEM()}${
+    opts.toolsSystem ? `\n\n${opts.toolsSystem}` : ''
+  }`;
+  // Conversation is rebuilt per round (system stays first).
+  const messages: any[] = [
+    { role: 'system', content: system },
+    ...(opts.history ?? []).map((t) => ({ role: t.role, content: t.content })),
+    { role: 'user', content: opts.prompt },
+  ];
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    const { data } = await axios.post(
+      `${cfg.baseUrl.replace(/\/$/, '')}/chat/completions`,
+      {
+        model: cfg.model,
+        messages,
+        temperature: 0.7,
+        max_tokens: MAX_TOKENS,
+        ...(opts.tools.length
+          ? {
+              tools: opts.tools.map((t) => ({
+                type: 'function',
+                function: t,
+              })),
+              tool_choice: 'auto',
+            }
+          : {}),
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${cfg.apiKey}`,
+          ...(cfg.extraHeaders ?? {}),
+        },
+        timeout: REQUEST_TIMEOUT_MS,
+      },
+    );
+
+    const m = data?.choices?.[0]?.message;
+    const calls: any[] = m?.tool_calls ?? [];
+    if (!calls.length) {
+      return m?.content?.trim() ?? '🤖 (no response from the model)';
+    }
+    // Echo the assistant's tool call back into the conversation…
+    messages.push({
+      role: 'assistant',
+      content: m?.content ?? '',
+      tool_calls: calls,
+    });
+    // …then answer each call with its execution result.
+    for (const call of calls) {
+      let result: string;
+      try {
+        const args = call.function?.arguments
+          ? JSON.parse(call.function.arguments)
+          : {};
+        result = await opts.execute(call.function?.name ?? '', args);
+      } catch (err) {
+        result = `ERROR: ${(err as Error).message}`;
+      }
+      messages.push({
+        role: 'tool',
+        tool_call_id: call.id,
+        content: String(result).slice(0, 4000),
+      });
+    }
+  }
+  return '🤖 (too many tool steps — ask me again more directly)';
+}
+
+
 async function openAICompatible(
   opts: AIReplyOptions,
   cfg: {

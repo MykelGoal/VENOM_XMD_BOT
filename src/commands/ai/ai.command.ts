@@ -1,13 +1,14 @@
 import type { Command } from '../../types/command.type';
 import { reply, react } from '../../services/message.service';
-import { getAIReply } from '../../services/ai.service';
+import { getAIReplyWithTools } from '../../services/ai.service';
+import { buildAITools, buildToolExecutor, aiToolsSystemPrompt } from '../../services/ai-tools.service';
 
 const ai: Command = {
   name: 'ai',
   aliases: ['gpt', 'ask', 'bot'],
   category: 'ai',
-  description: 'Ask the AI assistant anything.',
-  usage: 'ai <your question>',
+  description: 'Ask the AI assistant anything — it can even run commands for you.',
+  usage: 'ai <your question or request>',
   async run({ sock, msg, text }) {
     const prompt = text || msg.quoted?.body;
     if (!prompt) {
@@ -17,7 +18,12 @@ const ai: Command = {
     await react(sock, msg, '🤖');
     // Show "typing…" so it feels responsive while the model generates.
     await sock.sendPresenceUpdate('composing', msg.chat).catch(() => {});
-    const answer = await getAIReply({ prompt });
+    const answer = await getAIReplyWithTools({
+      prompt,
+      tools: buildAITools(),
+      execute: buildToolExecutor(sock, msg),
+      toolsSystem: aiToolsSystemPrompt(),
+    });
     await sock.sendPresenceUpdate('paused', msg.chat).catch(() => {});
     await reply(sock, msg, answer);
   },

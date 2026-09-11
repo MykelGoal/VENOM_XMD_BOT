@@ -11,7 +11,13 @@ import { settingsRepo } from '../database/repositories/settings.repo';
 import { accessRepo } from '../database/repositories/access.repo';
 import { chatMemoryRepo } from '../database/repositories/chatmemory.repo';
 import { reply, react } from '../services/message.service';
-import { getAIReply, isTranscriptionConfigured } from '../services/ai.service';
+import { getAIReply, getAIReplyWithTools, isTranscriptionConfigured } from '../services/ai.service';
+import {
+  buildAITools,
+  buildToolExecutor,
+  aiToolsSystemPrompt,
+  handlePendingIntentMessage,
+} from '../services/ai-tools.service';
 import { speakText, isSpeakableLength } from '../services/tts.service';
 import { transcribeVoiceNote } from './voice.handler';
 import { userRepo } from '../database/repositories/user.repo';
@@ -37,6 +43,10 @@ export async function handleCommand(
   //   depending on the 'aivoice' setting, answered with a spoken voice note
   //   (voice-for-voice, like a human — see middleware/aimode.ts).
   if (!msg.body.startsWith(prefix)) {
+    // AI purchase confirmation ("yes" / "no" to a proposed buy) — handled by
+    // deterministic code BEFORE any AI call, and even when AI mode is off
+    // (so .ai users can confirm too). Money never waits on a model.
+    if (await handlePendingIntentMessage(sock, msg)) return;
     if (msg.type === 'audioMessage') {
       await handleAIVoiceNote(sock, msg);
       return;
@@ -183,7 +193,15 @@ async function aiConverse(
   const history = remember ? chatMemoryRepo.history(msg.chat) : [];
 
   await sock.sendPresenceUpdate('composing', msg.chat).catch(() => {});
-  const answer = await getAIReply({ prompt, history });
+  // AI 2.0: the AI gets TOOLS — it can run commands, check wallets and
+  // propose purchases itself instead of just telling the user what to type.
+  const answer = await getAIReplyWithTools({
+    prompt,
+    history,
+    tools: buildAITools(),
+    execute: buildToolExecutor(sock, msg),
+    toolsSystem: aiToolsSystemPrompt(),
+  });
   await sock.sendPresenceUpdate('paused', msg.chat).catch(() => {});
 
   // Record the turn (bounded: 16 messages/chat, 24h TTL).

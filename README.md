@@ -102,6 +102,18 @@ The key is stored in the bot's private database — it never touches the repo. (
 
 ---
 
+## 🤖 AI 2.0 — an AI that *does* things
+
+Add any AI key (`.setkey gemini <key>` — free at [aistudio.google.com](https://aistudio.google.com/apikey)) and turn on AI mode (`.aimode on`), and the assistant becomes an **agent**:
+
+> **"play duduke by Simi"** → it downloads and sends the song itself
+> **"how much dey my wallet?"** → it checks and tells you
+> **"buy MTN 1GB for 0803…"** → it quotes the exact price, you reply **yes**, it delivers (or sends a payment link if your wallet is short)
+
+Works with all providers (DeepSeek, Gemini, Groq, OpenRouter, OpenAI) via function calling. Money moves **only** on your explicit "yes" — matched by deterministic code, never by the model — and owner/admin/group commands are blocked from AI reach.
+
+---
+
 ## 💻 Local
 
 ```bash
