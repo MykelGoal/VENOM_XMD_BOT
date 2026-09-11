@@ -5,6 +5,7 @@ import { startConnection } from './core/connection';
 import { restoreSessionFromEnv } from './core/session';
 import { startKeepAlive } from './core/keepalive';
 import { startMemorySync } from './services/memorysync.service';
+import { initMongo, hydrateMirroredCollections } from './database/mongo';
 
 const BANNER = `
 ╭──────────────────────────────╮
@@ -38,6 +39,13 @@ async function main(): Promise<void> {
   // Optional: hydrate AI conversation memory from the remote store and keep
   // it synced (no-op unless the owner set MEMORY_URL).
   startMemorySync();
+
+  // Optional MongoDB persistence for money records (wallets, ledger,
+  // pending payments). Runs BEFORE the connection so the VTU payment
+  // watcher resumes against fully-hydrated wallets. No-op without
+  // MONGO_URI (local JSON files are used instead).
+  await initMongo();
+  await hydrateMirroredCollections();
 
   await startConnection();
 }

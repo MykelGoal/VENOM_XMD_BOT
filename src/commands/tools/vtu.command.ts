@@ -13,6 +13,7 @@ import {
 } from '../../services/vtu.service';
 import { maskKey } from '../../services/ai.service';
 import { env } from '../../config';
+import { isMongoEnabled } from '../../database/mongo';
 
 /**
  * VTU owner panel — status, pricing margin, sales stats.
@@ -72,6 +73,11 @@ const vtuCmd: Command = {
         `📶 Bundles loaded: ${bundleCount}\n` +
         `📈 Data markup: *${marginPct()}%* (change: .vtu margin 5)\n` +
         `💼 Wallets: ${stats.wallets} · Ledger entries: ${stats.entries}\n` +
+        `🗄️ Storage: ${
+          isMongoEnabled()
+            ? '🟢 MongoDB — wallets survive redeploys'
+            : '⚠️ local files — set MONGO_URI or wallets wipe on redeploy'
+        }\n` +
         `🏦 Total user balances: ${naira(stats.totalBalanceKobo)}\n\n` +
         (isSudo(msg.senderNumber) ? '_Money tips: airtime sells at face value (Flutterwave commission covers fees); data carries your markup._' : ''),
     );

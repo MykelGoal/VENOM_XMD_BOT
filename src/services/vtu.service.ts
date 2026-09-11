@@ -22,6 +22,7 @@ import { env } from '../config';
 import { logger } from '../utils/logger';
 import { settingsRepo } from '../database/repositories/settings.repo';
 import { walletRepo } from '../database/repositories/wallet.repo';
+import { flushMongo } from '../database/mongo';
 
 // Re-exported so the VTU commands have a single service facade.
 export { walletRepo };
@@ -257,6 +258,7 @@ export async function initFund(number: string, amountNaira: number): Promise<{ t
     status: 'pending',
     createdAt: Date.now(),
   });
+  await flushMongo(); // the payment watch itself survives a crash
   startPolling(tx);
   return { txRef: tx, link };
 }
@@ -312,6 +314,20 @@ async function payBill(opts: {
   if (status !== 'success') throw new Error(`bill status: ${String(status)}`);
 }
 
+/**
+ * True when a bill payment with this reference already exists at Flutterwave
+ * (GET /v3/bills/{reference}). Used on crash-resume so a delivery that
+ * succeeded right before a restart is NEVER paid for twice.
+ */
+async function billExists(reference: string): Promise<boolean> {
+  try {
+    const res = await flw('get', `/bills/${encodeURIComponent(reference)}`);
+    return Boolean((res as any)?.data);
+  } catch {
+    return false; // 404 / error → no bill with that reference yet
+  }
+}
+
 /** Buy with wallet balance (instant). Refunds the wallet if delivery fails. */
 export async function purchaseWithWallet(
   number: string,
@@ -324,12 +340,32 @@ export async function purchaseWithWallet(
   } catch {
     return { ok: false, error: 'INSUFFICIENT' };
   }
+  // Record the in-flight purchase BEFORE paying: if the process dies
+  // mid-way, boot recovery finishes (or refunds) it — the debited money
+  // can never vanish with the process.
+  walletRepo.addPending({
+    txRef: tx,
+    number,
+    kind: 'data',
+    amountKobo: bundle.priceKobo,
+    bundleId: bundle.id,
+    bundleName: bundle.flwName,
+    network: bundle.network,
+    phone,
+    status: 'paid', // the money already left the wallet
+    createdAt: Date.now(),
+  });
+  await flushMongo(); // debit + record survive a crash from here on
   try {
     await payBill({ type: bundle.flwName, customer: phone, amountNaira: bundle.amountNaira, reference: tx });
+    walletRepo.markPending(tx, { status: 'delivered' });
+    await flushMongo();
     return { ok: true, txRef: tx };
   } catch (err) {
     // Delivery failed — money goes straight back to the wallet.
     walletRepo.credit(number, bundle.priceKobo, 'refund', `refund:${tx}`, 'delivery failed');
+    walletRepo.markPending(tx, { status: 'refunded' });
+    await flushMongo();
     logger.warn({ err }, 'VTU delivery failed, wallet refunded');
     return { ok: false, error: 'DELIVERY_FAILED' };
   }
@@ -349,11 +385,26 @@ export async function buyAirtime(
   } catch {
     return { ok: false, error: 'INSUFFICIENT' };
   }
+  // In-flight record (same crash-safety as data purchases).
+  walletRepo.addPending({
+    txRef: tx,
+    number,
+    kind: 'airtime',
+    amountKobo: kobo,
+    phone,
+    status: 'paid',
+    createdAt: Date.now(),
+  });
+  await flushMongo();
   try {
     await payBill({ type: 'AIRTIME', customer: phone, amountNaira, reference: tx });
+    walletRepo.markPending(tx, { status: 'delivered' });
+    await flushMongo();
     return { ok: true, txRef: tx };
   } catch (err) {
     walletRepo.credit(number, kobo, 'refund', `refund:${tx}`, 'airtime failed');
+    walletRepo.markPending(tx, { status: 'refunded' });
+    await flushMongo();
     logger.warn({ err }, 'airtime delivery failed, wallet refunded');
     return { ok: false, error: 'DELIVERY_FAILED' };
   }
@@ -391,14 +442,20 @@ async function verifyPaid(txRef: string, expectedKobo: number): Promise<boolean>
 /** Verify + process one pending payment. Idempotent; returns true when resolved. */
 export async function checkAndProcess(txRef: string): Promise<boolean> {
   const p = walletRepo.getPending(txRef);
-  if (!p || p.status !== 'pending') return true;
-  if (!(await verifyPaid(txRef, p.amountKobo))) return false;
+  // 'paid' = money was already verified (or taken from the wallet) before a
+  // restart — resume straight to fulfilment. Never re-verify, never re-charge.
+  if (!p || (p.status !== 'pending' && p.status !== 'paid')) return true;
 
-  walletRepo.markPending(txRef, { status: 'paid', paidAt: Date.now() });
+  if (p.status === 'pending') {
+    if (!(await verifyPaid(txRef, p.amountKobo))) return false;
+    walletRepo.markPending(txRef, { status: 'paid', paidAt: Date.now() });
+    await flushMongo(); // "money received" survives a crash from here on
+  }
 
   if (p.kind === 'fund') {
     const credited = walletRepo.credit(p.number, p.amountKobo, 'fund', txRef, 'wallet top-up');
     const balance = walletRepo.balance(p.number);
+    await flushMongo();
     await notify(
       p.number,
       credited
@@ -406,7 +463,29 @@ export async function checkAndProcess(txRef: string): Promise<boolean> {
         : `✅ Payment confirmed — your wallet balance na *${naira(balance)}*.`,
     );
     walletRepo.markPending(txRef, { status: 'delivered' });
+    await flushMongo();
     return true;
+  }
+
+  if (p.kind === 'airtime') {
+    // Wallet-lane airtime (money already debited pre-crash): deliver it.
+    const amountNaira = (p.amountKobo ?? 0) / 100;
+    try {
+      if (!(await billExists(txRef))) {
+        await payBill({ type: 'AIRTIME', customer: p.phone ?? p.number, amountNaira, reference: txRef });
+      }
+      walletRepo.markPending(txRef, { status: 'delivered' });
+      await flushMongo();
+      await notify(p.number, `✅ *Airtime delivered!*\n\n📶 ${naira(p.amountKobo ?? 0)} → ${p.phone}\n🧾 Ref: ${txRef}`);
+      return true;
+    } catch (err) {
+      walletRepo.credit(p.number, p.amountKobo ?? 0, 'refund', `refund:${txRef}`, 'airtime failed');
+      walletRepo.markPending(txRef, { status: 'refunded' });
+      await flushMongo();
+      logger.warn({ err }, 'airtime resume failed, wallet refunded');
+      await notify(p.number, `⚠️ Airtime no deliver — ${naira(p.amountKobo ?? 0)} don enter your *wallet* back. Try again small time.`);
+      return true;
+    }
   }
 
   // Direct buy-now (data): deliver the bundle the tx_ref was created for.
@@ -415,17 +494,23 @@ export async function checkAndProcess(txRef: string): Promise<boolean> {
   if (!bundle) {
     walletRepo.credit(p.number, p.amountKobo, 'refund', `refund:${txRef}`, 'bundle unavailable');
     walletRepo.markPending(txRef, { status: 'refunded' });
+    await flushMongo();
     await notify(p.number, `⚠️ That bundle no dey available again — ${naira(p.amountKobo)} don enter your *wallet* instead. Use .data to pick another.`);
     return true;
   }
   try {
-    await payBill({
-      type: bundle.flwName,
-      customer: p.phone ?? p.number,
-      amountNaira: bundle.amountNaira,
-      reference: txRef,
-    });
+    // Crash-resume guard: if the bill already went through right before a
+    // restart, don't pay for it twice — just finish the record + receipt.
+    if (!(await billExists(txRef))) {
+      await payBill({
+        type: bundle.flwName,
+        customer: p.phone ?? p.number,
+        amountNaira: bundle.amountNaira,
+        reference: txRef,
+      });
+    }
     walletRepo.markPending(txRef, { status: 'delivered' });
+    await flushMongo();
     await notify(
       p.number,
       `🎉 *Payment confirmed — data delivered!*\n\n📶 ${bundle.network} • ${bundle.flwName}\n📞 ${p.phone}\n🧾 Ref: ${txRef}`,
@@ -435,6 +520,7 @@ export async function checkAndProcess(txRef: string): Promise<boolean> {
     // Money collected but delivery failed → wallet credit, never vanish.
     walletRepo.credit(p.number, p.amountKobo, 'refund', `refund:${txRef}`, 'delivery failed');
     walletRepo.markPending(txRef, { status: 'refunded' });
+    await flushMongo();
     logger.warn({ err }, 'direct-buy delivery failed, credited wallet');
     await notify(
       p.number,

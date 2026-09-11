@@ -153,12 +153,19 @@ export const walletRepo = {
       .sort((a, b) => b.createdAt - a.createdAt);
   },
 
-  /** All open pending payments younger than maxAgeMs (boot recovery). */
+  /**
+   * Unresolved payments younger than maxAgeMs (boot recovery). Includes
+   * 'paid' — money verified (or wallet-debited) right before a crash must
+   * still be fulfilled on restart, never lost.
+   */
   recentPending(maxAgeMs: number, limit = 50): PendingPayment[] {
     const cutoff = Date.now() - maxAgeMs;
     return pending
       .all()
-      .filter((p) => p.status === 'pending' && p.createdAt >= cutoff)
+      .filter(
+        (p) =>
+          (p.status === 'pending' || p.status === 'paid') && p.createdAt >= cutoff,
+      )
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, limit);
   },

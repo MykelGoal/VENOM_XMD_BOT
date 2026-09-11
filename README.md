@@ -100,6 +100,8 @@ The key is stored in the bot's private database — it never touches the repo. (
 
 *Note (merchant mode): Flutterwave charges bills to your Flutterwave balance, so keep it funded — check it anytime with `.vtu`.*
 
+**⚠️ VTU owners on Render free tier:** redeploys wipe the bot's local files — including wallets. Set a **free** [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) connection string as `MONGO_URI` and wallets/ledger/pending payments are mirrored to it and restored on every boot (`.vtu` shows the storage status). Without it the bot still works, but balances reset on redeploy.
+
 ---
 
 ## 🤖 AI 2.0 — an AI that *does* things
