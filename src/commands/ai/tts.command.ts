@@ -1,6 +1,7 @@
 import type { Command } from '../../types/command.type';
 import { reply, react } from '../../services/message.service';
 import { speak, isVoiceConfigured } from '../../services/voice.service';
+import { speakText } from '../../services/tts.service';
 import { voiceRepo } from '../../database/repositories/voice.repo';
 
 /**
@@ -8,13 +9,14 @@ import { voiceRepo } from '../../database/repositories/voice.repo';
  *   .tts Hello there            → default voice
  *   .say <text>                 → alias
  * If the sender has a personal cloned voice (.clonevoice), it is used
- * automatically — otherwise the default engine voice.
+ * automatically. Otherwise the FREE voice chain speaks: Edge TTS (no API
+ * key!) → Groq Orpheus → Fish Audio default.
  */
 const tts: Command = {
   name: 'tts',
   aliases: ['say', 'speak', 'voice'],
   category: 'ai',
-  description: 'Convert text to a spoken voice note (uses your clone if you have one).',
+  description: 'Convert text to a spoken voice note (free — no key needed; uses your clone if you have one).',
   usage: 'tts <text>',
   async run({ sock, msg, text }) {
     const say = (text || '').trim() || msg.quoted?.body?.trim() || '';
@@ -23,43 +25,32 @@ const tts: Command = {
       return;
     }
 
-    if (!isVoiceConfigured()) {
-      await reply(
-        sock,
-        msg,
-        '❌ Text-to-speech needs a Fish Audio key.\n' +
-          'Owner: set `FISHAUDIO_API_KEY` (free key at console.fish.audio).',
-      );
-      return;
-    }
-
     if (say.length > 1000) {
       await reply(sock, msg, '⚠️ That text is too long — keep it under 1000 characters.');
       return;
     }
 
-    // Use the sender's cloned voice if they have one.
+    // Use the sender's cloned voice if they have one (needs Fish Audio).
     const mine = voiceRepo.get(msg.senderNumber);
 
     await react(sock, msg, '🎙️');
     try {
-      const audio = await speak(say, { voiceId: mine?.modelId, format: 'mp3' });
+      let audio: Buffer;
+      if (mine?.modelId && isVoiceConfigured()) {
+        audio = await speak(say, { voiceId: mine.modelId, format: 'mp3' });
+      } else {
+        // Free chain: Edge TTS (no key) → Groq Orpheus → Fish default.
+        audio = (await speakText(say)).audio;
+      }
       await sock.sendMessage(
         msg.chat,
         { audio, mimetype: 'audio/mpeg', ptt: true },
         { quoted: msg.raw },
       );
       await react(sock, msg, '✅');
-    } catch (err) {
+    } catch {
       await react(sock, msg, '❌');
-      const m = (err as Error)?.message;
-      await reply(
-        sock,
-        msg,
-        m === 'NO_KEY'
-          ? '❌ No Fish Audio key configured.'
-          : '❌ Could not generate speech. Check the key/quota and try again.',
-      );
+      await reply(sock, msg, '❌ All voice engines failed — please try again shortly.');
     }
   },
 };

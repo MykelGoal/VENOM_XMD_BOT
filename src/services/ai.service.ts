@@ -99,7 +99,7 @@ export function removeRuntimeAIKey(provider: string): boolean {
 }
 
 /** Runtime key if set, otherwise the env-variable key. */
-function effectiveAIKey(provider: string): string {
+export function effectiveAIKey(provider: string): string {
   return getRuntimeAIKey(provider) || ENV_KEYS[provider]?.() || '';
 }
 

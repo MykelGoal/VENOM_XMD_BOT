@@ -26,6 +26,12 @@ function bool(key: string, fallback = false): boolean {
   return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
 }
 
+/** Optional numeric env var with a default (falls back when unset/invalid). */
+function num(key: string, fallback: number): number {
+  const v = Number(process.env[key]);
+  return Number.isFinite(v) && v > 0 ? v : fallback;
+}
+
 export type LoginMethod = 'qr' | 'pairing' | 'both';
 
 export const env = {
@@ -121,6 +127,24 @@ export const env = {
     // Optional default voice model ID used by .tts when the caller has no
     // personal clone. Leave blank to use Fish's built-in default voice.
     defaultVoice: optional('FISHAUDIO_DEFAULT_VOICE', ''),
+  },
+
+  // Free voice-note replies (AI mode "voice-for-voice"). The chain tries
+  // Edge TTS first (Microsoft neural voices, NO API key needed), then Groq
+  // Orpheus TTS (same free GROQ_API_KEY as Whisper transcription), then
+  // Fish Audio if a key is set. Voices are configurable below.
+  tts: {
+    // Microsoft Edge neural voice for AI replies. Default = Nigerian
+    // English 🇳🇬. Any of the 322 voices works (e.g. en-US-EmmaMultilingualNeural).
+    edgeVoice: optional('EDGE_TTS_VOICE', 'en-NG-EzinneNeural'),
+    // Groq Orpheus TTS voice (troy | hannah | austin | autumn | daniel | diana).
+    groqVoice: optional('GROQ_TTS_VOICE', 'troy'),
+    // Groq free tier allows ~200 characters per TTS request — text is
+    // chunked at sentence boundaries around this size.
+    groqChunkChars: num('GROQ_TTS_CHUNK', 200),
+    // AI replies longer than this many characters stay as text (a spoken
+    // essay is not human-like; humans send short voice notes).
+    maxSpeakChars: num('AI_TTS_MAX_CHARS', 600),
   },
 
   // remove.bg API key for .nobg background removal (optional).
