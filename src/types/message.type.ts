@@ -27,4 +27,6 @@ export interface SerializedMessage {
   quoted?: SerializedMessage;
   /** Mentioned JIDs. */
   mentions: string[];
+  /** True when this is a post forwarded from a WhatsApp Channel/newsletter. */
+  isNewsletterForward?: boolean;
 }

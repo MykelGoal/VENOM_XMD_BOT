@@ -1,27 +1,50 @@
-import type { proto, WASocket } from '@whiskeysockets/baileys';
-import { getContentType, jidNormalizedUser } from '@whiskeysockets/baileys';
+import type {
+  proto,
+  WAMessageKey,
+  WASocket,
+} from '@whiskeysockets/baileys';
+import {
+  extractMessageContent,
+  getContentType,
+  jidNormalizedUser,
+} from '@whiskeysockets/baileys';
 import type { SerializedMessage } from '../types/message.type';
 import { jidToNumber } from './helpers';
 
+/**
+ * Remove WhatsApp wrapper messages (ephemeral/view-once/edited/etc.) so the
+ * rest of the bot sees the actual text or media message inside.
+ */
+function unwrapMessage(
+  message: proto.IMessage | null | undefined,
+): proto.IMessage | undefined {
+  if (!message) return undefined;
+  return extractMessageContent(message) ?? message;
+}
+
 /** Extract the best-effort text body from any message type. */
 function extractBody(message: proto.IMessage | null | undefined): string {
-  if (!message) return '';
-  const type = getContentType(message);
+  const content = unwrapMessage(message);
+  if (!content) return '';
+
+  const type = getContentType(content);
   switch (type) {
     case 'conversation':
-      return message.conversation ?? '';
+      return content.conversation ?? '';
     case 'extendedTextMessage':
-      return message.extendedTextMessage?.text ?? '';
+      return content.extendedTextMessage?.text ?? '';
     case 'imageMessage':
-      return message.imageMessage?.caption ?? '';
+      return content.imageMessage?.caption ?? '';
     case 'videoMessage':
-      return message.videoMessage?.caption ?? '';
+      return content.videoMessage?.caption ?? '';
+    case 'documentMessage':
+      return content.documentMessage?.caption ?? '';
     case 'buttonsResponseMessage':
-      return message.buttonsResponseMessage?.selectedButtonId ?? '';
+      return content.buttonsResponseMessage?.selectedButtonId ?? '';
     case 'listResponseMessage':
-      return (
-        message.listResponseMessage?.singleSelectReply?.selectedRowId ?? ''
-      );
+      return content.listResponseMessage?.singleSelectReply?.selectedRowId ?? '';
+    case 'templateButtonReplyMessage':
+      return content.templateButtonReplyMessage?.selectedId ?? '';
     default:
       return '';
   }
@@ -37,28 +60,38 @@ export function serializeMessage(
 ): SerializedMessage | null {
   if (!raw.message) return null;
 
-  const chat = raw.key.remoteJid ?? '';
+  const key = raw.key as WAMessageKey;
+  const chat = key.remoteJid ?? '';
   const isGroup = chat.endsWith('@g.us');
-  const fromMe = raw.key.fromMe ?? false;
+  const fromMe = key.fromMe ?? false;
 
+  // Keep @lid senders as @lid for group actions, but use participantPn below
+  // for senderNumber when WhatsApp supplies the phone-number alias.
   const sender = isGroup
-    ? jidNormalizedUser(raw.key.participant ?? '')
+    ? jidNormalizedUser(
+        key.participant ?? key.participantLid ?? key.participantPn ?? '',
+      )
     : fromMe
       ? jidNormalizedUser(sock.user?.id ?? '')
       : jidNormalizedUser(chat);
 
-  const type = getContentType(raw.message) ?? 'unknown';
-  const body = extractBody(raw.message);
+  const content = unwrapMessage(raw.message) ?? raw.message;
+  const type = getContentType(content) ?? 'unknown';
+  const body = extractBody(content);
 
   const contextInfo =
-    (raw.message as any)?.[type]?.contextInfo ??
-    raw.message.extendedTextMessage?.contextInfo;
+    (content as any)?.[type]?.contextInfo ??
+    content.extendedTextMessage?.contextInfo;
 
   const mentions: string[] = contextInfo?.mentionedJid ?? [];
+  const isNewsletterForward = Boolean(
+    contextInfo?.forwardedNewsletterMessageInfo,
+  );
 
   let quoted: SerializedMessage | undefined;
   const quotedMsg = contextInfo?.quotedMessage;
   if (quotedMsg) {
+    const quotedContent = unwrapMessage(quotedMsg) ?? quotedMsg;
     quoted = {
       raw: {
         key: {
@@ -75,8 +108,8 @@ export function serializeMessage(
       isGroup,
       fromMe: false,
       id: contextInfo?.stanzaId ?? '',
-      body: extractBody(quotedMsg),
-      type: getContentType(quotedMsg) ?? 'unknown',
+      body: extractBody(quotedContent),
+      type: getContentType(quotedContent) ?? 'unknown',
       mentions: [],
     };
   }
@@ -85,7 +118,9 @@ export function serializeMessage(
     raw,
     chat,
     sender,
-    senderNumber: jidToNumber(sender),
+    senderNumber: jidToNumber(
+      (isGroup ? key.participantPn : key.senderPn) ?? sender,
+    ),
     isGroup,
     fromMe,
     id: raw.key.id ?? '',
@@ -93,5 +128,6 @@ export function serializeMessage(
     type,
     quoted,
     mentions,
+    isNewsletterForward,
   };
 }
