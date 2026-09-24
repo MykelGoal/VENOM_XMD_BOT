@@ -1,48 +1,53 @@
 import fs from 'fs';
 import path from 'path';
 import type { Command } from '../types/command.type';
+import {
+  CommandRegistry,
+  type CommandRegistration,
+} from '../core/command-registry';
 import { logger } from '../utils/logger';
 
-/** Registry of all loaded commands, keyed by primary name. */
-export const commands = new Map<string, Command>();
+const registry = new CommandRegistry();
+
+/** Canonical commands only, keyed by primary name (kept for menus/tooling). */
+export const commands = registry.commands;
+
+/** Resolve a primary command name or alias in O(1). */
+export function resolveCommand(name: string): Command | undefined {
+  return registry.resolve(name);
+}
 
 /**
- * Recursively scans the commands directory and loads every *.command
- * file. Drop a new file into any subfolder and it's picked up here —
- * no central switch statement to edit.
+ * Recursively scans the commands directory and loads every *.command file.
+ * Drop a new file into any subfolder and it is picked up automatically.
  */
 export function loadCommands(): void {
-  commands.clear();
   const dir = __dirname;
-  const files = walk(dir).filter((f) =>
-    /\.command\.(ts|js)$/.test(f),
-  );
+  const files = walk(dir)
+    .filter((file) => /\.command\.(ts|js)$/.test(file))
+    .sort();
+  const registrations: CommandRegistration[] = [];
 
   for (const file of files) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const mod = require(file);
-      const command: Command = mod.default ?? mod.command;
-      if (!command?.name || typeof command.run !== 'function') {
-        logger.warn(`Skipping invalid command file: ${file}`);
-        continue;
-      }
-      commands.set(command.name.toLowerCase(), command);
+      const mod = require(file) as { default?: Command; command?: Command };
+      const command = mod.default ?? mod.command;
+      registrations.push({ command, source: path.relative(dir, file) });
     } catch (err) {
       logger.error({ err }, `Failed to load command: ${file}`);
     }
   }
 
-  logger.info(`📦 Loaded ${commands.size} commands.`);
+  const result = registry.rebuild(registrations);
+  for (const issue of result.issues) logger.warn(issue);
+  logger.info(
+    `📦 Loaded ${result.commandCount} commands (${result.lookupCount} names and aliases).`,
+  );
 }
 
-/** Return all commands grouped by category (for the menu). */
+/** Return all canonical commands grouped by category (for menus). */
 export function commandsByCategory(): Record<string, Command[]> {
-  const grouped: Record<string, Command[]> = {};
-  for (const cmd of commands.values()) {
-    (grouped[cmd.category] ??= []).push(cmd);
-  }
-  return grouped;
+  return registry.byCategory();
 }
 
 /** Recursively collect file paths under a directory. */

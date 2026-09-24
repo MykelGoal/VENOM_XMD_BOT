@@ -39,8 +39,8 @@ export async function transcribeVoiceNote(
  * the flag is off, there is no Groq key, or the message isn't a voice note.
  *
  * When AI mode will reply to this voice note (see middleware/aimode.ts),
- * this handler stays out of the way — the command handler transcribes and
- * answers it itself, so the user gets ONE reply instead of two.
+ * this handler stays out of the way — the conversation handler transcribes
+ * and answers it itself, so the user gets ONE reply instead of two.
  */
 export async function handleVoiceNote(
   sock: WASocket,

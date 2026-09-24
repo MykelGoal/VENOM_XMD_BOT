@@ -4,16 +4,26 @@ import { PATHS } from '../config';
 import { logger } from '../utils/logger';
 import { mirrorSet, mirrorDelete } from './mongo';
 
-const DB_DIR = path.join(PATHS.root, 'database-store');
+/** Override is used by automated tests so they never touch production data. */
+const DB_DIR = process.env.VENOM_DATA_DIR
+  ? path.resolve(process.env.VENOM_DATA_DIR)
+  : path.join(PATHS.root, 'database-store');
 
-/** Registry of live collections (for boot-time Mongo hydration). */
+/** Activity/settings writes can be coalesced; money records remain immediate. */
+const WRITE_DELAY_MS = 75;
+const DURABLE_COLLECTIONS = new Set([
+  'wallets',
+  'walletledger',
+  'vtupending',
+]);
+
+/** Registry of live collections (Mongo hydration and graceful shutdown). */
 const registry = new Map<string, JsonDB<never>>();
 
 /**
  * Hydrate one collection from Mongo at boot.
  *   • Mongo has docs → replace local state with them (redeploy-proof).
- *   • Mongo empty but local file has records → seed Mongo from local
- *     (adding MONGO_URI must never wipe existing wallets).
+ *   • Mongo empty but local file has records → seed Mongo from local.
  */
 export function hydrateCollection(
   name: string,
@@ -26,25 +36,35 @@ export function hydrateCollection(
   const localCount = Object.keys(local).length;
   if (remoteCount === 0) {
     if (localCount > 0) {
-      for (const [k, v] of Object.entries(local)) mirrorSet(name, k, v);
+      for (const [key, value] of Object.entries(local)) {
+        mirrorSet(name, key, value);
+      }
       return 'seeded';
     }
-    return 'hydrated'; // both empty — nothing to do
+    return 'hydrated';
   }
   coll.replaceAll(docs as Record<string, never>);
   return 'hydrated';
 }
 
+/** Flush every pending local JSON write synchronously before process exit. */
+export function flushLocalCollections(): void {
+  for (const collection of registry.values()) collection.flush();
+}
+
 /**
- * Tiny JSON-file "database". Each collection is one .json file.
- * This is intentionally simple and dependency-free so the bot runs
- * out of the box. Swap this module for SQLite/Mongo later without
- * touching the repositories' public API.
+ * Small JSON-file database behind repository interfaces.
+ *
+ * Non-critical rapid writes are coalesced into one atomic file replacement,
+ * preventing per-message stats from repeatedly blocking the event loop.
+ * Wallet/payment collections still flush synchronously on every mutation.
  */
 class JsonDB<T extends Record<string, unknown>> {
-  private file: string;
-  private name: string;
+  private readonly file: string;
+  private readonly name: string;
   private data: Record<string, T> = {};
+  private dirty = false;
+  private persistTimer: NodeJS.Timeout | null = null;
 
   constructor(collection: string) {
     if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true });
@@ -75,8 +95,39 @@ class JsonDB<T extends Record<string, unknown>> {
     }
   }
 
+  /** Queue a coalesced write, except for money-critical collections. */
   private persist(): void {
-    fs.writeFileSync(this.file, JSON.stringify(this.data, null, 2));
+    this.dirty = true;
+    if (DURABLE_COLLECTIONS.has(this.name)) {
+      this.flush();
+      return;
+    }
+    if (this.persistTimer) return;
+    this.persistTimer = setTimeout(() => this.flush(), WRITE_DELAY_MS);
+  }
+
+  /** Atomically replace the file so a crash cannot leave partial JSON. */
+  flush(): void {
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer);
+      this.persistTimer = null;
+    }
+    if (!this.dirty) return;
+
+    const temporary = `${this.file}.${process.pid}.tmp`;
+    try {
+      fs.mkdirSync(DB_DIR, { recursive: true });
+      fs.writeFileSync(temporary, JSON.stringify(this.data, null, 2));
+      fs.renameSync(temporary, this.file);
+      this.dirty = false;
+    } catch (err) {
+      logger.error({ err }, `Failed to persist DB file ${this.file}`);
+      try {
+        if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+      } catch {
+        // Best-effort cleanup; preserve the original persistence error above.
+      }
+    }
   }
 
   get(id: string): T | undefined {
@@ -112,7 +163,7 @@ class JsonDB<T extends Record<string, unknown>> {
 export function createCollection<T extends Record<string, unknown>>(
   name: string,
 ): JsonDB<T> {
-  const coll = new JsonDB<T>(name);
-  registry.set(name, coll as unknown as JsonDB<never>);
-  return coll;
+  const collection = new JsonDB<T>(name);
+  registry.set(name, collection as unknown as JsonDB<never>);
+  return collection;
 }

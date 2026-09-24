@@ -1,6 +1,4 @@
 import type { Command } from '../../types/command.type';
-import { reply } from '../../services/message.service';
-import { numberToJid } from '../../utils/helpers';
 
 const ship: Command = {
   name: 'ship',

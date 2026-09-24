@@ -59,7 +59,7 @@ const vtuCmd: Command = {
         'Activate merchant mode with `.setkey flutterwave FLWSECK-…`';
     }
 
-    let bundleCount = '—';
+    let bundleCount: string;
     try {
       bundleCount = String((await listBundles()).length);
     } catch {

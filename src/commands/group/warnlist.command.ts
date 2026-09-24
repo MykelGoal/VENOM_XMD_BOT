@@ -1,5 +1,4 @@
 import type { Command } from '../../types/command.type';
-import { reply } from '../../services/message.service';
 import { warnRepo } from '../../database/repositories/warn.repo';
 import { numberToJid, jidToNumber } from '../../utils/helpers';
 

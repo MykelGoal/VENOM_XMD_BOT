@@ -1,11 +1,10 @@
 import type { Command } from '../../types/command.type';
-import { reply } from '../../services/message.service';
 import { economyRepo, CURRENCY } from '../../database/repositories/economy.repo';
 import { jidToNumber } from '../../utils/helpers';
 
 const balance: Command = {
   name: 'balance',
-  aliases: ['bal', 'wallet', 'money'],
+  aliases: ['bal', 'money'],
   category: 'economy',
   description: 'Check your (or a mentioned user\'s) balance.',
   usage: 'balance [@user]',

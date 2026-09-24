@@ -1,8 +1,12 @@
 import type { Command } from '../../types/command.type';
 import { reply } from '../../services/message.service';
 
-const VALID = ['available', 'unavailable', 'composing', 'recording', 'paused'] as const;
-type Presence = (typeof VALID)[number];
+type Presence =
+  | 'available'
+  | 'unavailable'
+  | 'composing'
+  | 'recording'
+  | 'paused';
 
 const LABELS: Record<Presence, string> = {
   available: '🟢 online',

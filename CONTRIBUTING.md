@@ -5,7 +5,7 @@ Thanks for your interest in improving VENOM-XMD! 🕷️
 ## Getting started
 
 1. Fork and clone the repo.
-2. `npm install`
+2. `npm ci`
 3. `cp .env.example .env` and fill in your values.
 4. `npm run dev`
 
@@ -31,10 +31,13 @@ export default hello;
 ```
 
 The auto-loader registers it on the next start — no central file to edit.
+Command names and aliases must be unique; registry collisions are reported at
+startup instead of being silently overwritten.
 
 ## Rules of the road
 
-- Keep the code type-safe: `npx tsc --noEmit` must pass.
+- Run `npm run validate` before submitting changes. It executes ESLint, strict
+  TypeScript checking, the production build, and automated tests.
 - One command per file; keep business logic in `services/`.
 - Don't commit `.env` or the `sessions/` folder.
 - Be respectful in issues and PRs.

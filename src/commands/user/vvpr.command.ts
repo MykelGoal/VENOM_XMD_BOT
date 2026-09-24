@@ -1,7 +1,7 @@
 import type { proto } from '@whiskeysockets/baileys';
 import type { Command } from '../../types/command.type';
 import { getBaileys } from '../../core/baileys';
-import { reply, react } from '../../services/message.service';
+import { reply } from '../../services/message.service';
 import { env } from '../../config';
 
 /**

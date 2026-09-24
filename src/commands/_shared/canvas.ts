@@ -1,6 +1,5 @@
 import type { Command, CommandCategory } from '../../types/command.type';
 import { reply, react } from '../../services/message.service';
-import { downloadMedia } from '../../services/media.service';
 
 /**
  * Canvas/overlay meme commands via some-random-api.com — free, no key.

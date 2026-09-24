@@ -124,6 +124,18 @@ npm install && cp .env.example .env   # fill SESSION_ID + OWNER_NUMBER
 npm run build && npm start
 ```
 
+### Development checks
+
+Run the complete quality gate before opening a pull request or deploying:
+
+```bash
+npm ci
+npm run validate
+```
+
+This runs ESLint, strict TypeScript checking, a production build, and automated
+registry, persistence, anti-link, anti-delete, retry, and muted-spam tests.
+
 ---
 
 <div align="center">

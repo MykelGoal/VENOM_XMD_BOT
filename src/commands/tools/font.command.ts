@@ -20,7 +20,6 @@ function shift(ch: string, upperBase: number, lowerBase: number): string {
 
 const font: Command = {
   name: 'font',
-  aliases: ['fancy'],
   category: 'tools',
   description: 'Convert text into fancy Unicode fonts.',
   usage: 'font <text>',

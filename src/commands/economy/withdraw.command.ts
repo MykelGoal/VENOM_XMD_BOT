@@ -10,7 +10,7 @@ const withdraw: Command = {
   usage: 'withdraw <amount|all>',
   async run({ sock, msg, args }) {
     const u = economyRepo.get(msg.senderNumber);
-    let amount =
+    const amount =
       args[0]?.toLowerCase() === 'all' ? u.bank : parseInt(args[0], 10);
 
     if (isNaN(amount) || amount <= 0) {

@@ -19,7 +19,6 @@ const calc: Command = {
       return;
     }
     try {
-      // eslint-disable-next-line no-new-func
       const result = Function(`"use strict"; return (${text})`)();
       if (typeof result !== 'number' || !isFinite(result)) {
         throw new Error('bad');

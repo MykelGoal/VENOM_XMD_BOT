@@ -17,7 +17,7 @@ import {
  */
 const airtime: Command = {
   name: 'airtime',
-  aliases: ['vtu', 'credit'],
+  aliases: ['credit'],
   category: 'tools',
   description: 'Buy airtime (any network) at face value from your wallet.',
   usage: 'airtime <amount> [phone]',

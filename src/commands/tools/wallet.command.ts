@@ -18,7 +18,7 @@ const LEDGER_ICON: Record<LedgerKind, string> = {
 
 const walletCmd: Command = {
   name: 'wallet',
-  aliases: ['balance', 'mywallet'],
+  aliases: ['mywallet'],
   category: 'tools',
   description: 'Your Venom wallet — balance and recent transactions.',
   usage: 'wallet',

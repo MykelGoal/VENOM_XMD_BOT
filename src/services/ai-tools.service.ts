@@ -17,7 +17,7 @@
 import type { WASocket } from '@whiskeysockets/baileys';
 import type { SerializedMessage } from '../types/message.type';
 import type { Command } from '../types/command.type';
-import { commands } from '../commands';
+import { commands, resolveCommand } from '../commands';
 import { checkCooldown } from '../middleware/cooldown';
 import { reply } from './message.service';
 import { env } from '../config';
@@ -300,9 +300,7 @@ export function buildToolExecutor(
       /* ── generic command runner ── */
       case 'run_command': {
         const raw = String(args.command ?? '').toLowerCase().replace(/^\.+/, '');
-        const cmd =
-          commands.get(raw) ??
-          [...commands.values()].find((c) => c.aliases?.includes(raw));
+        const cmd = resolveCommand(raw);
         if (!cmd) return `ERROR: unknown command "${raw}".`;
         if (!isAIRunnable(cmd)) {
           return `ERROR: "${cmd.name}" is not available through the AI.`;

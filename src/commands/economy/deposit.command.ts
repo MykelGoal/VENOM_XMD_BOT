@@ -11,7 +11,7 @@ const deposit: Command = {
   async run({ sock, msg, args }) {
     const u = economyRepo.get(msg.senderNumber);
     const space = u.bankCap - u.bank;
-    let amount =
+    const amount =
       args[0]?.toLowerCase() === 'all'
         ? Math.min(u.wallet, space)
         : parseInt(args[0], 10);

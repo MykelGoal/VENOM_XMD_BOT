@@ -263,7 +263,7 @@ const setkey: Command = {
     // ── Persist to the host platform so it survives redeploys ──────
     // Local save (above) is instant; the host save (Render) makes it
     // permanent across redeploys/commits but triggers a short restart.
-    let hostLine = '';
+    let hostLine: string;
     const envName = envKeyNameFor(provider);
     if (hostPersistenceEnabled() && envName) {
       await reply(

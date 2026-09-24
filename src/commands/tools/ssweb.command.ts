@@ -41,7 +41,6 @@ const ssweb: Command = {
     if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
     try {
       // Validate.
-      // eslint-disable-next-line no-new
       new URL(url);
     } catch {
       await reply(sock, msg, '❌ That doesn’t look like a valid website URL.');

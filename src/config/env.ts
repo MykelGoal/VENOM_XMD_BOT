@@ -2,17 +2,6 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-/**
- * Reads a required env var, throwing a clear error if it is missing.
- */
-function required(key: string, fallback?: string): string {
-  const value = process.env[key] ?? fallback;
-  if (value === undefined || value === '') {
-    throw new Error(`[config] Missing required environment variable: ${key}`);
-  }
-  return value;
-}
-
 /** Reads an optional env var with a fallback. */
 function optional(key: string, fallback: string): string {
   const value = process.env[key];

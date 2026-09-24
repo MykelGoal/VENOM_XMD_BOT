@@ -3,7 +3,6 @@ import { reply } from '../../services/message.service';
 
 const command: Command = {
   name: 'flipnum',
-  aliases: ["negate"],
   category: 'tools',
   description: "Flip the sign of a number.",
   usage: 'flipnum <number>',

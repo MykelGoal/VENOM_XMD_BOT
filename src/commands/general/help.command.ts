@@ -1,5 +1,5 @@
 import type { Command } from '../../types/command.type';
-import { commands } from '../index';
+import { resolveCommand } from '../index';
 import { reply } from '../../services/message.service';
 
 const help: Command = {
@@ -19,9 +19,7 @@ const help: Command = {
       return;
     }
 
-    const cmd =
-      commands.get(name) ??
-      [...commands.values()].find((c) => c.aliases?.includes(name));
+    const cmd = resolveCommand(name);
 
     if (!cmd) {
       await reply(sock, msg, `❌ No command named *${name}*.`);
