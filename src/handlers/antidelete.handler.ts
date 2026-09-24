@@ -21,6 +21,11 @@ export async function handleAntiDelete(
 
   const id = update.key.id;
   if (!id) return;
+
+  // Never restore a message the bot intentionally deleted for mute/anti-link
+  // enforcement. Without this guard, anti-delete can undo moderation.
+  if (msgCache.consumeAntiDeleteSuppression(id)) return;
+
   const cached = msgCache.get(id);
   if (!cached) return;
 

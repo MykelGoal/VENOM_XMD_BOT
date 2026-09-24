@@ -3,7 +3,8 @@ import type { SerializedMessage } from '../types/message.type';
 import { groupRepo } from '../database/repositories/group.repo';
 import { isGroupAdmin, isBotAdmin } from './permission';
 import { logger } from '../utils/logger';
-import { jidToNumber } from '../utils/helpers';
+import { jidToNumber, sleep } from '../utils/helpers';
+import { msgCache } from '../core/msgcache';
 
 // Match protocol URLs, www links, WhatsApp short/invite links, and ordinary
 // bare domains such as "example.com/path". The previous expression missed
@@ -12,6 +13,36 @@ const LINK_REGEX =
   /(?:https?:\/\/|www\.|chat\.whatsapp\.com\/|wa\.me\/|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?::\d{2,5})?(?:[/?#][^\s]*)?)/i;
 /** Treat 5+ mentions in one message as mass-tagging. */
 const MASS_TAG_THRESHOLD = 5;
+
+/**
+ * Delete a moderated message immediately, with one short retry for transient
+ * WhatsApp failures. Mark it so anti-delete cannot restore it afterward.
+ */
+async function deleteForModeration(
+  sock: WASocket,
+  msg: SerializedMessage,
+  label: string,
+): Promise<boolean> {
+  if (msg.id) msgCache.suppressAntiDelete(msg.id);
+
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      await sock.sendMessage(msg.chat, { delete: msg.raw.key });
+      return true;
+    } catch (err) {
+      lastError = err;
+      if (attempt === 1) await sleep(120);
+    }
+  }
+
+  if (msg.id) msgCache.unsuppressAntiDelete(msg.id);
+  logger.error(
+    { err: lastError, groupJid: msg.chat, senderJid: msg.sender },
+    label,
+  );
+  return false;
+}
 
 /** Exported for focused checks without having to execute moderation actions. */
 export function containsLink(text: string): boolean {
@@ -41,14 +72,11 @@ export async function enforceAntilink(
   );
   if (senderIsMuted) {
     if (await isBotAdmin(sock, msg.chat)) {
-      try {
-        await sock.sendMessage(msg.chat, { delete: msg.raw.key });
-      } catch (err) {
-        logger.error(
-          { err, groupJid: msg.chat, senderJid: msg.sender },
-          'Failed to delete muted user message',
-        );
-      }
+      await deleteForModeration(
+        sock,
+        msg,
+        'Failed to delete muted user message after retry',
+      );
       return true;
     }
   }
@@ -90,15 +118,12 @@ export async function enforceAntilink(
         ? 'mass-tagging is not allowed'
         : 'banned words are not allowed';
 
-  try {
-    await sock.sendMessage(msg.chat, { delete: msg.raw.key });
-  } catch (err) {
-    logger.error(
-      { err, groupJid: msg.chat, senderJid: msg.sender },
-      'Group guard could not delete the offending message',
-    );
-    return true;
-  }
+  const deleted = await deleteForModeration(
+    sock,
+    msg,
+    'Group guard could not delete the offending message after retry',
+  );
+  if (!deleted) return true;
 
   try {
     // Preserve the sender's real JID. In LID-mode groups, converting its
