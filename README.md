@@ -6,11 +6,11 @@
 
 # 🕷️ VENOM-XMD
 
-**Multi-device WhatsApp bot · 398 commands · [Baileys](https://github.com/WhiskeySockets/Baileys) + TypeScript**
+**Multi-device WhatsApp bot · 434 commands · [Baileys](https://github.com/WhiskeySockets/Baileys) + TypeScript**
 
 <br/>
 
-<img src="https://img.shields.io/badge/commands-398-39ff88?style=for-the-badge&labelColor=050806" alt="commands"/>
+<img src="https://img.shields.io/badge/commands-434-39ff88?style=for-the-badge&labelColor=050806" alt="commands"/>
 <img src="https://img.shields.io/badge/language-TypeScript-3178c6?style=for-the-badge&labelColor=050806" alt="typescript"/>
 <img src="https://img.shields.io/badge/baileys-multi--device-00d95f?style=for-the-badge&labelColor=050806" alt="baileys"/>
 <img src="https://img.shields.io/badge/node-%E2%89%A520-39ff88?style=for-the-badge&labelColor=050806" alt="node"/>
