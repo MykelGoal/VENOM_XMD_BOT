@@ -5,7 +5,7 @@ import { isBotAdmin } from '../../middleware/permission';
 /** Close a group: only admins can send messages. */
 const lock: Command = {
   name: 'lock',
-  aliases: ['close', 'mute'],
+  aliases: ['close'],
   category: 'group',
   description: 'Close the group so only admins can send messages.',
   usage: 'lock',

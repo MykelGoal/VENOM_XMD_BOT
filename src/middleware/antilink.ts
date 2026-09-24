@@ -3,6 +3,7 @@ import type { SerializedMessage } from '../types/message.type';
 import { groupRepo } from '../database/repositories/group.repo';
 import { isGroupAdmin, isBotAdmin } from './permission';
 import { logger } from '../utils/logger';
+import { jidToNumber } from '../utils/helpers';
 
 // Match protocol URLs, www links, WhatsApp short/invite links, and ordinary
 // bare domains such as "example.com/path". The previous expression missed
@@ -32,8 +33,13 @@ export async function enforceAntilink(
   const settings = groupRepo.get(msg.chat);
   if (!settings) return false;
 
-  // Muted-user enforcement: delete their messages (bot must be admin).
-  if (settings.mutedUsers.includes(msg.senderNumber)) {
+  // Muted-user enforcement: match both the phone-number alias and the actual
+  // addressing JID. LID-mode groups can supply a different value for each.
+  const senderIds = [msg.senderNumber, jidToNumber(msg.sender)];
+  const senderIsMuted = senderIds.some((id) =>
+    settings.mutedUsers.includes(id),
+  );
+  if (senderIsMuted) {
     if (await isBotAdmin(sock, msg.chat)) {
       try {
         await sock.sendMessage(msg.chat, { delete: msg.raw.key });

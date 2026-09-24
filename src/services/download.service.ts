@@ -18,15 +18,25 @@
  */
 import axios from 'axios';
 import yts from 'yt-search';
+import ytdlp from 'youtube-dl-exec';
+import ffmpegPath from '@ffmpeg-installer/ffmpeg';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import crypto from 'crypto';
 
 const DC = 'https://apis.davidcyriltech.my.id';
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36';
 
-async function getJson<T = any>(url: string, timeout = 30000): Promise<T> {
+async function getJson<T = any>(
+  url: string,
+  timeout = 30000,
+  headers: Record<string, string> = {},
+): Promise<T> {
   const { data } = await axios.get<T>(url, {
     timeout,
-    headers: { 'User-Agent': UA, Accept: 'application/json' },
+    headers: { 'User-Agent': UA, Accept: 'application/json', ...headers },
   });
   return data;
 }
@@ -89,23 +99,161 @@ function extractYtId(url: string): string {
 
 export interface DlResult {
   title: string;
-  url: string; // direct media url
+  url: string; // direct media URL or a temporary local file
   thumbnail?: string;
   quality?: string;
+  mimetype?: string;
+  /** Remove a temporary local download after Baileys has uploaded it. */
+  cleanup?: () => Promise<void>;
+}
+
+/** Remove every yt-dlp artefact for a unique output prefix. */
+async function cleanupYtDlp(prefix: string): Promise<void> {
+  const dir = path.dirname(prefix);
+  const base = path.basename(prefix);
+  try {
+    const files = await fs.promises.readdir(dir);
+    await Promise.all(
+      files
+        .filter((name) => name.startsWith(base + '.'))
+        .map((name) =>
+          fs.promises.unlink(path.join(dir, name)).catch(() => undefined),
+        ),
+    );
+  } catch {
+    /* best-effort temp cleanup */
+  }
+}
+
+/**
+ * Run yt-dlp locally as the reliable fallback when a free download API is
+ * unavailable. The npm package fetches the current yt-dlp executable during
+ * npm install; @ffmpeg-installer supplies a known ffmpeg path for conversion.
+ */
+async function ytDlpDownload(
+  videoUrl: string,
+  kind: 'audio' | 'video',
+): Promise<DlResult> {
+  const prefix = path.join(
+    os.tmpdir(),
+    `venom-ytdlp-${crypto.randomUUID()}`,
+  );
+  const output = `${prefix}.%(ext)s`;
+
+  try {
+    if (kind === 'audio') {
+      await ytdlp(videoUrl, {
+        output,
+        extractAudio: true,
+        audioFormat: 'mp3',
+        audioQuality: 5,
+        ffmpegLocation: ffmpegPath.path,
+        noPlaylist: true,
+        noWarnings: true,
+        noCheckCertificates: true,
+        maxFilesize: '50M',
+        socketTimeout: 30,
+        retries: 2,
+      });
+
+      const file = `${prefix}.mp3`;
+      if (!fs.existsSync(file)) throw new Error('yt-dlp produced no MP3 file');
+      return {
+        title: '',
+        url: file,
+        quality: 'MP3',
+        mimetype: 'audio/mpeg',
+        cleanup: () => cleanupYtDlp(prefix),
+      };
+    }
+
+    await ytdlp(videoUrl, {
+      output,
+      // YouTube no longer exposes progressive formats for many videos. Merge
+      // an MP4 video stream (up to 720p) with M4A audio using bundled ffmpeg.
+      format:
+        'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best',
+      mergeOutputFormat: 'mp4',
+      ffmpegLocation: ffmpegPath.path,
+      noPlaylist: true,
+      noWarnings: true,
+      noCheckCertificates: true,
+      maxFilesize: '50M',
+      socketTimeout: 30,
+      retries: 2,
+    });
+
+    const candidates = (await fs.promises.readdir(path.dirname(prefix)))
+      .filter((name) => name.startsWith(path.basename(prefix) + '.'))
+      .filter((name) => !name.endsWith('.part'));
+    const name = candidates[0];
+    if (!name) throw new Error('yt-dlp produced no video file');
+    return {
+      title: '',
+      url: path.join(path.dirname(prefix), name),
+      quality: 'up to 720p',
+      mimetype: 'video/mp4',
+      cleanup: () => cleanupYtDlp(prefix),
+    };
+  } catch (err) {
+    await cleanupYtDlp(prefix);
+    throw err;
+  }
 }
 
 export async function ytMp3(videoUrl: string): Promise<DlResult> {
-  const d = await getJson(`${DC}/download/ytmp3?url=${encodeURIComponent(videoUrl)}`);
-  const r = d?.result;
-  if (!r?.download_url) throw new Error('ytmp3 failed');
-  return { title: r.title, url: r.download_url, thumbnail: r.thumbnail, quality: r.quality };
+  // The original provider became API-key-only in September 2026. Keep it as
+  // an optional fast path for owners who configure a key, otherwise use the
+  // local yt-dlp fallback instead of returning a misleading generic failure.
+  const apiKey = process.env.DAVID_CYRIL_API_KEY?.trim();
+  if (apiKey) {
+    try {
+      const d = await getJson(
+        `${DC}/download/ytmp3?url=${encodeURIComponent(videoUrl)}`,
+        45000,
+        { 'X-API-Key': apiKey },
+      );
+      const r = d?.result;
+      if (r?.download_url) {
+        return {
+          title: r.title,
+          url: r.download_url,
+          thumbnail: r.thumbnail,
+          quality: r.quality,
+          mimetype: 'audio/mpeg',
+        };
+      }
+    } catch {
+      /* key/provider failed — local fallback below */
+    }
+  }
+  return ytDlpDownload(videoUrl, 'audio');
 }
 
 export async function ytMp4(videoUrl: string): Promise<DlResult> {
-  const d = await getJson(`${DC}/download/ytmp4?url=${encodeURIComponent(videoUrl)}`);
-  const r = d?.result;
-  if (!r?.download_url) throw new Error('ytmp4 failed');
-  return { title: r.title, url: r.download_url, thumbnail: r.thumbnail, quality: r.quality };
+  const apiKey = process.env.DAVID_CYRIL_API_KEY?.trim();
+  if (apiKey) {
+    try {
+      const d = await getJson(
+        `${DC}/download/ytmp4?url=${encodeURIComponent(videoUrl)}`,
+        45000,
+        { 'X-API-Key': apiKey },
+      );
+      const r = d?.result;
+      if (r?.download_url) {
+        return {
+          title: r.title,
+          url: r.download_url,
+          thumbnail: r.thumbnail,
+          quality: r.quality,
+          mimetype: 'video/mp4',
+        };
+      }
+    } catch {
+      /* key/provider failed — local fallback below */
+    }
+  }
+  return ytDlpDownload(videoUrl, 'video');
 }
 
 /** ────────────────────────── TikTok ────────────────────────── */

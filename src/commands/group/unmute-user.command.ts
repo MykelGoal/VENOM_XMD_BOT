@@ -1,29 +1,32 @@
 import type { Command } from '../../types/command.type';
 import { reply } from '../../services/message.service';
 import { groupRepo } from '../../database/repositories/group.repo';
-import { numberToJid, jidToNumber } from '../../utils/helpers';
+import { jidToNumber } from '../../utils/helpers';
 
 const unmuteUser: Command = {
   name: 'unmute-user',
-  aliases: ['unmuteuser'],
+  aliases: ['unmuteuser', 'unmute'],
   category: 'group',
-  description: 'Unmute a previously muted user.',
-  usage: 'unmute-user @user',
+  description: 'Unmute one member so their messages remain visible again.',
+  usage: 'unmute @user (or reply to their message)',
   groupOnly: true,
   adminOnly: true,
   async run({ sock, msg }) {
-    const target =
-      msg.mentions[0] ??
-      (msg.quoted ? numberToJid(msg.quoted.senderNumber) : undefined);
+    const target = msg.mentions[0] ?? msg.quoted?.sender;
     if (!target) {
-      await reply(sock, msg, 'ℹ️ Mention or reply to the user to unmute.');
+      await reply(
+        sock,
+        msg,
+        'ℹ️ Mention the member or reply to their message with *.unmute*.',
+      );
       return;
     }
-    const num = jidToNumber(target);
-    groupRepo.unmuteUser(msg.chat, num);
+
+    const id = jidToNumber(target);
+    groupRepo.unmuteUser(msg.chat, id);
     await sock.sendMessage(
       msg.chat,
-      { text: `🔊 @${num} is unmuted.`, mentions: [target] },
+      { text: `🔊 @${id} is unmuted.`, mentions: [target] },
       { quoted: msg.raw },
     );
   },

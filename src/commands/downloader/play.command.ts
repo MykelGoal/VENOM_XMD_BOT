@@ -1,6 +1,7 @@
 import type { Command } from '../../types/command.type';
 import { reply, react } from '../../services/message.service';
 import { resolveYt, ytMp3, formatViews } from '../../services/download.service';
+import { logger } from '../../utils/logger';
 
 const play: Command = {
   name: 'play',
@@ -14,6 +15,8 @@ const play: Command = {
       return;
     }
     await react(sock, msg, '🔎');
+    let dl: Awaited<ReturnType<typeof ytMp3>> | undefined;
+    let stage = 'search';
     try {
       const v = await resolveYt(text);
       await reply(
@@ -22,20 +25,29 @@ const play: Command = {
         `🎵 *${v.title}*\n👤 ${v.author}\n⏱️ ${v.duration}  •  👁️ ${formatViews(v.views)}\n\n_Downloading audio…_`,
       );
       await react(sock, msg, '⏳');
-      const dl = await ytMp3(v.url);
+      stage = 'download';
+      dl = await ytMp3(v.url);
+      stage = 'WhatsApp upload';
       await sock.sendMessage(
         msg.chat,
         {
           audio: { url: dl.url },
-          mimetype: 'audio/mpeg',
+          mimetype: dl.mimetype || 'audio/mpeg',
           fileName: `${v.title}.mp3`.replace(/[\\/:*?"<>|]/g, ''),
         },
         { quoted: msg.raw },
       );
       await react(sock, msg, '✅');
-    } catch (e) {
+    } catch (err) {
+      logger.error({ err, stage, query: text }, '.play failed');
       await react(sock, msg, '❌');
-      await reply(sock, msg, '❌ Could not fetch that song. Try a different title.');
+      await reply(
+        sock,
+        msg,
+        `❌ Could not fetch that song (${stage} failed). Please try again shortly.`,
+      );
+    } finally {
+      await dl?.cleanup?.();
     }
   },
 };

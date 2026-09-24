@@ -5,7 +5,7 @@ import { isBotAdmin } from '../../middleware/permission';
 /** Open a group: everyone can send messages. */
 const unlock: Command = {
   name: 'unlock',
-  aliases: ['open', 'unmute'],
+  aliases: ['open'],
   category: 'group',
   description: 'Open the group so everyone can send messages.',
   usage: 'unlock',

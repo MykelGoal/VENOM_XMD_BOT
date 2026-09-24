@@ -1,6 +1,7 @@
 import type { Command } from '../../types/command.type';
 import { reply, react } from '../../services/message.service';
 import { resolveYt, ytMp4, formatViews } from '../../services/download.service';
+import { logger } from '../../utils/logger';
 
 const video: Command = {
   name: 'video',
@@ -14,6 +15,8 @@ const video: Command = {
       return;
     }
     await react(sock, msg, '🔎');
+    let dl: Awaited<ReturnType<typeof ytMp4>> | undefined;
+    let stage = 'search';
     try {
       const v = await resolveYt(text);
       await reply(
@@ -22,20 +25,30 @@ const video: Command = {
         `🎬 *${v.title}*\n👤 ${v.author}\n⏱️ ${v.duration}  •  👁️ ${formatViews(v.views)}\n\n_Downloading video…_`,
       );
       await react(sock, msg, '⏳');
-      const dl = await ytMp4(v.url);
+      stage = 'download';
+      dl = await ytMp4(v.url);
+      stage = 'WhatsApp upload';
       await sock.sendMessage(
         msg.chat,
         {
           video: { url: dl.url },
+          mimetype: dl.mimetype || 'video/mp4',
           caption: `🎬 ${v.title}${dl.quality ? `\n📺 ${dl.quality}` : ''}`,
           fileName: `${v.title}.mp4`.replace(/[\\/:*?"<>|]/g, ''),
         },
         { quoted: msg.raw },
       );
       await react(sock, msg, '✅');
-    } catch {
+    } catch (err) {
+      logger.error({ err, stage, query: text }, '.video failed');
       await react(sock, msg, '❌');
-      await reply(sock, msg, '❌ Could not fetch that video. Try a different title.');
+      await reply(
+        sock,
+        msg,
+        `❌ Could not fetch that video (${stage} failed). Please try again shortly.`,
+      );
+    } finally {
+      await dl?.cleanup?.();
     }
   },
 };
