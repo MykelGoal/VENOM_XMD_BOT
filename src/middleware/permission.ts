@@ -2,11 +2,8 @@ import type {
   GroupMetadata,
   WASocket,
 } from '@whiskeysockets/baileys';
-import {
-  areJidsSameUser,
-  jidNormalizedUser,
-} from '@whiskeysockets/baileys';
 import { env } from '../config';
+import { getBaileys } from '../core/baileys';
 import { store } from '../core/store';
 import { accessRepo } from '../database/repositories/access.repo';
 
@@ -27,6 +24,7 @@ export function isMod(number: string): boolean {
 
 function sameUser(a: string | undefined, b: string | undefined): boolean {
   if (!a || !b) return false;
+  const { jidNormalizedUser, areJidsSameUser } = getBaileys();
   return (
     jidNormalizedUser(a) === jidNormalizedUser(b) || areJidsSameUser(a, b)
   );

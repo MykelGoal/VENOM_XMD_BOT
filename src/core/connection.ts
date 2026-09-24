@@ -1,8 +1,5 @@
 import { Boom } from '@hapi/boom';
-import {
-  DisconnectReason,
-  type WASocket,
-} from '@whiskeysockets/baileys';
+import type { WASocket } from '@whiskeysockets/baileys';
 import qrcode from 'qrcode-terminal';
 import { env } from '../config';
 import { logger } from '../utils/logger';
@@ -12,6 +9,7 @@ import { registerEventHandlers } from '../handlers/event.handler';
 import { registerVtuNotifier, resumePendingVtu, setVtuBotPhone } from '../services/vtu.service';
 import { sendText } from '../services/message.service';
 import { syncSessionToCloud } from './session';
+import { getBaileys } from './baileys';
 
 let pairingRequested = false;
 
@@ -73,6 +71,7 @@ export async function startConnection(): Promise<void> {
 
     // ── Closed / reconnect logic ──────────────────────────────
     if (connection === 'close') {
+      const { DisconnectReason } = getBaileys();
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
       const loggedOut = statusCode === DisconnectReason.loggedOut;
 

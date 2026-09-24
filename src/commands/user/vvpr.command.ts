@@ -1,6 +1,6 @@
 import type { proto } from '@whiskeysockets/baileys';
-import { downloadMediaMessage } from '@whiskeysockets/baileys';
 import type { Command } from '../../types/command.type';
+import { getBaileys } from '../../core/baileys';
 import { reply, react } from '../../services/message.service';
 import { env } from '../../config';
 
@@ -60,6 +60,7 @@ const vvpr: Command = {
         key: quoted.raw.key,
         message: inner,
       } as proto.IWebMessageInfo;
+      const { downloadMediaMessage } = getBaileys();
       const buffer = (await downloadMediaMessage(mediaMsg, 'buffer', {})) as Buffer;
 
       // Build a little context header so the owner knows where it came from.

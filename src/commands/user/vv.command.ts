@@ -1,6 +1,6 @@
 import type { proto } from '@whiskeysockets/baileys';
-import { downloadMediaMessage } from '@whiskeysockets/baileys';
 import type { Command } from '../../types/command.type';
+import { getBaileys } from '../../core/baileys';
 import { reply, react } from '../../services/message.service';
 
 /**
@@ -44,6 +44,7 @@ const vv: Command = {
         key: quoted.raw.key,
         message: inner,
       } as proto.IWebMessageInfo;
+      const { downloadMediaMessage } = getBaileys();
       const buffer = (await downloadMediaMessage(mediaMsg, 'buffer', {})) as Buffer;
 
       if (imageMessage) {

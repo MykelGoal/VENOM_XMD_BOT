@@ -1,10 +1,7 @@
-import makeWASocket, {
-  Browsers,
-  fetchLatestBaileysVersion,
-} from '@whiskeysockets/baileys';
 import type { WASocket } from '@whiskeysockets/baileys';
 import { waLogger, logger } from '../utils/logger';
 import { loadAuthState } from './auth';
+import { getBaileys } from './baileys';
 import type { AuthBundle } from './auth';
 
 export interface CreatedClient {
@@ -17,6 +14,8 @@ export interface CreatedClient {
  * (QR, reconnect, pairing) are wired up separately in connection.ts.
  */
 export async function createClient(): Promise<CreatedClient> {
+  const { default: makeWASocket, Browsers, fetchLatestBaileysVersion } =
+    getBaileys();
   const auth = await loadAuthState();
   const { version, isLatest } = await fetchLatestBaileysVersion();
   logger.info(`Using WA v${version.join('.')} (latest: ${isLatest})`);

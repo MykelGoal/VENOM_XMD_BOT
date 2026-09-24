@@ -6,6 +6,7 @@ import { restoreSessionFromEnv } from './core/session';
 import { startKeepAlive } from './core/keepalive';
 import { startMemorySync } from './services/memorysync.service';
 import { initMongo, hydrateMirroredCollections } from './database/mongo';
+import { initBaileys } from './core/baileys';
 
 const BANNER = `
 ╭──────────────────────────────╮
@@ -20,6 +21,10 @@ async function main(): Promise<void> {
   logger.info(`Login method: ${env.loginMethod} | Prefix: "${env.prefix}"`);
 
   installGlobalErrorHandlers();
+
+  // Baileys 6.7.19+ is ESM-only; load it through the native-import bridge
+  // before any auth, serializer or socket code requests its runtime exports.
+  await initBaileys();
 
   // OWNER_NUMBER is effectively required — without it, owner-only commands
   // refuse everyone. Warn loudly but still boot so the user can react.

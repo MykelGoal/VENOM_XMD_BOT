@@ -3,12 +3,8 @@ import type {
   WAMessageKey,
   WASocket,
 } from '@whiskeysockets/baileys';
-import {
-  extractMessageContent,
-  getContentType,
-  jidNormalizedUser,
-} from '@whiskeysockets/baileys';
 import type { SerializedMessage } from '../types/message.type';
+import { getBaileys } from '../core/baileys';
 import { jidToNumber } from './helpers';
 
 /**
@@ -19,6 +15,7 @@ function unwrapMessage(
   message: proto.IMessage | null | undefined,
 ): proto.IMessage | undefined {
   if (!message) return undefined;
+  const { extractMessageContent } = getBaileys();
   return extractMessageContent(message) ?? message;
 }
 
@@ -27,6 +24,7 @@ function extractBody(message: proto.IMessage | null | undefined): string {
   const content = unwrapMessage(message);
   if (!content) return '';
 
+  const { getContentType } = getBaileys();
   const type = getContentType(content);
   switch (type) {
     case 'conversation':
@@ -60,6 +58,7 @@ export function serializeMessage(
 ): SerializedMessage | null {
   if (!raw.message) return null;
 
+  const { getContentType, jidNormalizedUser } = getBaileys();
   const key = raw.key as WAMessageKey;
   const chat = key.remoteJid ?? '';
   const isGroup = chat.endsWith('@g.us');

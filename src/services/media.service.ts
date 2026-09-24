@@ -1,5 +1,5 @@
-import { downloadMediaMessage } from '@whiskeysockets/baileys';
 import type { proto } from '@whiskeysockets/baileys';
+import { getBaileys } from '../core/baileys';
 import { Sticker, StickerTypes } from 'wa-sticker-formatter';
 import sharp from 'sharp';
 import ffmpeg from 'fluent-ffmpeg';
@@ -21,6 +21,7 @@ ffmpeg.setFfmpegPath(ffmpegPath.path);
 export async function downloadMedia(
   raw: proto.IWebMessageInfo,
 ): Promise<Buffer> {
+  const { downloadMediaMessage } = getBaileys();
   const buffer = (await downloadMediaMessage(
     raw,
     'buffer',

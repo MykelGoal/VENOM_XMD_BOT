@@ -1,6 +1,6 @@
-import { useMultiFileAuthState } from '@whiskeysockets/baileys';
 import type { AuthenticationState } from '@whiskeysockets/baileys';
 import { PATHS } from '../config';
+import { getBaileys } from './baileys';
 
 export interface AuthBundle {
   state: AuthenticationState;
@@ -13,6 +13,7 @@ export interface AuthBundle {
  * every restart. This folder is gitignored — never commit it.
  */
 export async function loadAuthState(): Promise<AuthBundle> {
+  const { useMultiFileAuthState } = getBaileys();
   const { state, saveCreds } = await useMultiFileAuthState(PATHS.sessions);
   return { state, saveCreds };
 }
