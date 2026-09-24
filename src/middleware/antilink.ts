@@ -20,8 +20,8 @@ export function containsLink(text: string): boolean {
 /**
  * Group content guard: enforces anti-link, anti-tag and anti-word for
  * groups that enable them. Anti-link applies to everyone; the softer guards
- * exempt admins. The bot must be admin to delete/remove. Returns true if the
- * message was handled (blocked).
+ * exempt admins. The bot must be admin to delete. Returns true if the message
+ * was handled (blocked).
  */
 export async function enforceAntilink(
   sock: WASocket,
@@ -76,11 +76,13 @@ export async function enforceAntilink(
     return false;
   }
 
-  const reason = hasLink
-    ? 'links are not allowed'
-    : massTag
-      ? 'mass-tagging is not allowed'
-      : 'banned words are not allowed';
+  const reason = isChannelShare
+    ? 'forwarded Channel posts are not allowed'
+    : hasLink
+      ? 'links are not allowed'
+      : massTag
+        ? 'mass-tagging is not allowed'
+        : 'banned words are not allowed';
 
   try {
     await sock.sendMessage(msg.chat, { delete: msg.raw.key });
@@ -100,11 +102,9 @@ export async function enforceAntilink(
       mentions: [msg.sender],
     });
 
-    // Delete links from everyone, but do not try to remove an admin (or the
-    // group owner). Non-admin link senders keep the original remove policy.
-    if (hasLink && !senderIsAdmin) {
-      await sock.groupParticipantsUpdate(msg.chat, [msg.sender], 'remove');
-    }
+    // Delete-only policy: a pasted link or forwarded Channel post should not
+    // instantly remove someone for a mistake. Admin and non-admin messages
+    // are treated the same; the offending content is deleted and warned.
   } catch (err) {
     logger.error(
       { err, groupJid: msg.chat, senderJid: msg.sender },

@@ -6,7 +6,7 @@ import { isBotAdmin } from '../../middleware/permission';
 const antilink: Command = {
   name: 'antilink',
   category: 'group',
-  description: 'Delete links from everyone and remove non-admin link senders.',
+  description: 'Delete links and forwarded Channel posts without removing senders.',
   usage: 'antilink on | antilink off',
   groupOnly: true,
   adminOnly: true,
@@ -42,7 +42,7 @@ const antilink: Command = {
       sock,
       msg,
       enabled
-        ? '✅ Anti-link turned *ON*. Links from admins and forwarded WhatsApp Channel posts will also be deleted.'
+        ? '✅ Anti-link turned *ON* in delete-only mode. Links from admins and forwarded WhatsApp Channel posts will be deleted, but nobody will be removed.'
         : '✅ Anti-link turned *OFF*.',
     );
   },
