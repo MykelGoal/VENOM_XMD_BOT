@@ -17,10 +17,12 @@ const {
   tournamentRepo,
 } = require('../dist/database/repositories/tournament.repo');
 const {
+  getTournamentPaymentAccount,
   parseRoundResults,
   placementPoints,
   postRegistrationMilestone,
   sendTournamentAnnouncement,
+  setTournamentPaymentAccount,
 } = require('../dist/services/tournament.service');
 
 function createTournament(code) {
@@ -31,6 +33,7 @@ function createTournament(code) {
     eventDate: '5 October 2026, 7:00 PM WAT',
     paymentInstructions: 'Contact the organizer privately.',
     createdByJid: '2348000000001@s.whatsapp.net',
+    createdByDmJid: '2348000000001@s.whatsapp.net',
     createdByNumber: '2348000000001',
   });
 }
@@ -52,6 +55,34 @@ function registerAndApprove(code, index) {
 after(() => {
   flushLocalCollections();
   fs.rmSync(dataDir, { recursive: true, force: true });
+});
+
+test('payment account is stored persistently and returned for private replies', () => {
+  setTournamentPaymentAccount({
+    bank: 'OPAY',
+    accountNumber: '1234567890',
+    accountName: 'Tournament Organizer',
+  });
+  assert.deepEqual(getTournamentPaymentAccount(), {
+    bank: 'OPAY',
+    accountNumber: '1234567890',
+    accountName: 'Tournament Organizer',
+  });
+});
+
+test('payment proof state survives as part of the registration record', () => {
+  const tournament = createTournament('PROOF');
+  tournamentRepo.addPlayer(tournament.code, {
+    number: '2348000000999',
+    jid: '2348000000999@s.whatsapp.net',
+    nickname: 'Proof Player',
+    freeFireUid: '1234567890',
+  });
+  const { player } = tournamentRepo.markPaymentProof(
+    tournament.code,
+    '2348000000999',
+  );
+  assert.equal(typeof player.paymentProofSubmittedAt, 'number');
 });
 
 test('launch announcement is one message mentioning all members once', async () => {
@@ -79,6 +110,8 @@ test('launch announcement is one message mentioning all members once', async () 
   assert.equal(sent[0].content.mentions.length, 70);
   assert.equal(new Set(sent[0].content.mentions).size, 70);
   assert.match(sent[0].content.text, /VENOM FREE FIRE SOLO TOURNAMENT/);
+  assert.match(sent[0].content.text, /payment account and your reference/);
+  assert.doesNotMatch(sent[0].content.text, /Contact the organizer privately/);
   assert.match(sent[0].content.text, /Registration confirmations and room passwords are sent privately/);
 });
 
@@ -141,6 +174,7 @@ test('tournament state is durable locally and can be hydrated from Mongo shape',
     prizes: { first: 25000, second: 10000, third: 5000 },
     status: 'registration',
     createdByJid: '1@s.whatsapp.net',
+    createdByDmJid: '1@s.whatsapp.net',
     createdByNumber: '1',
     participants: [],
     announcedMilestones: [],

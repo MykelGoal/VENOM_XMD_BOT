@@ -30,6 +30,7 @@ export interface TournamentPlayer {
   approvedAt?: number;
   approvedBy?: string;
   rejectedAt?: number;
+  paymentProofSubmittedAt?: number;
   checkedInAt?: number;
   rounds: TournamentRoundScore[];
 }
@@ -52,6 +53,7 @@ export interface TournamentModel extends Record<string, unknown> {
   prizes: TournamentPrizes;
   status: TournamentStatus;
   createdByJid: string;
+  createdByDmJid: string;
   createdByNumber: string;
   participants: TournamentPlayer[];
   announcedMilestones: number[];

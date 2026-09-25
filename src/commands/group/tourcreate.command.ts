@@ -3,18 +3,21 @@ import { tournamentRepo } from '../../database/repositories/tournament.repo';
 import { getGroupMetadata } from '../../services/group.service';
 import {
   flushTournament,
+  getTournamentPaymentAccount,
+  paymentInstructions,
   sendTournamentAnnouncement,
   tournamentErrorMessage,
   tournamentStorageReady,
 } from '../../services/tournament.service';
 import { reply } from '../../services/message.service';
+import { numberToJid } from '../../utils/helpers';
 
 const tourcreate: Command = {
   name: 'tourcreate',
   aliases: ['createtour'],
   category: 'group',
   description: 'Create and announce a persistent Free Fire tournament.',
-  usage: 'tourcreate <code> | <date/time> | [payment instructions]',
+  usage: 'tourcreate <code> | <date/time>',
   groupOnly: true,
   adminOnly: true,
   async run({ sock, msg, text }) {
@@ -27,28 +30,43 @@ const tourcreate: Command = {
       return;
     }
 
-    const [rawCode = '', eventDate = '', rawPayment = ''] = text
+    const [rawCode = '', eventDate = ''] = text
       .split('|')
       .map((part) => part.trim());
     if (!rawCode || !eventDate) {
       await reply(
         sock,
         msg,
-        'ℹ️ Usage: *tourcreate VENOM40 | 5 October, 7 PM | Transfer to [your payment details]*',
+        'ℹ️ Usage: *tourcreate VENOM40 | 5 October, 7 PM*\nSet the payment account privately first with *.touraccount*.',
+      );
+      return;
+    }
+    const configuredAccount = getTournamentPaymentAccount();
+    const payment = configuredAccount
+      ? paymentInstructions(configuredAccount)
+      : '';
+    if (!payment) {
+      await reply(
+        sock,
+        msg,
+        '🚫 No tournament payment account is configured. DM the bot with *.touraccount BANK | ACCOUNT_NUMBER | ACCOUNT_NAME* first.',
       );
       return;
     }
 
     try {
       const metadata = await getGroupMetadata(sock, msg.chat);
+      const participantPn = (
+        msg.raw.key as typeof msg.raw.key & { participantPn?: string }
+      ).participantPn;
       const tournament = tournamentRepo.create({
         code: rawCode,
         groupJid: msg.chat,
         groupName: metadata.subject,
         eventDate,
-        paymentInstructions:
-          rawPayment || 'Contact the tournament organizer privately for payment details.',
+        paymentInstructions: payment,
         createdByJid: msg.sender,
+        createdByDmJid: participantPn ?? numberToJid(msg.senderNumber),
         createdByNumber: msg.senderNumber,
       });
       await flushTournament();

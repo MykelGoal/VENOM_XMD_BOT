@@ -9,6 +9,7 @@ import {
   tournamentRepo,
   type RankedTournamentPlayer,
 } from '../database/repositories/tournament.repo';
+import { settingsRepo } from '../database/repositories/settings.repo';
 import { flushMongo, isMongoEnabled } from '../database/mongo';
 import { isGroupAdmin, isSudo } from '../middleware/permission';
 import { getGroupMetadata } from './group.service';
@@ -18,6 +19,45 @@ import { logger } from '../utils/logger';
 const MILESTONES = new Set([10, 20, 30, 40]);
 const MAX_ROUNDS = 3;
 const DM_CONCURRENCY = 5;
+const ACCOUNT_KEYS = {
+  bank: 'tournament.payment.bank',
+  number: 'tournament.payment.number',
+  name: 'tournament.payment.name',
+} as const;
+
+export interface TournamentPaymentAccount {
+  bank: string;
+  accountNumber: string;
+  accountName: string;
+}
+
+export function getTournamentPaymentAccount(): TournamentPaymentAccount | null {
+  const bank = settingsRepo.get(ACCOUNT_KEYS.bank)?.trim() ?? '';
+  const accountNumber = settingsRepo.get(ACCOUNT_KEYS.number)?.trim() ?? '';
+  const accountName = settingsRepo.get(ACCOUNT_KEYS.name)?.trim() ?? '';
+  if (!bank || !accountNumber || !accountName) return null;
+  return { bank, accountNumber, accountName };
+}
+
+export function setTournamentPaymentAccount(
+  account: TournamentPaymentAccount,
+): void {
+  settingsRepo.set(ACCOUNT_KEYS.bank, account.bank.trim());
+  settingsRepo.set(ACCOUNT_KEYS.number, account.accountNumber.trim());
+  settingsRepo.set(ACCOUNT_KEYS.name, account.accountName.trim());
+}
+
+export function clearTournamentPaymentAccount(): void {
+  settingsRepo.delete(ACCOUNT_KEYS.bank);
+  settingsRepo.delete(ACCOUNT_KEYS.number);
+  settingsRepo.delete(ACCOUNT_KEYS.name);
+}
+
+export function paymentInstructions(
+  account: TournamentPaymentAccount,
+): string {
+  return `${account.bank} — ${account.accountNumber} — ${account.accountName}`;
+}
 
 export function tournamentStorageReady(): boolean {
   return isMongoEnabled();
@@ -103,9 +143,9 @@ export async function sendTournamentAnnouncement(
     '',
     '📝 *HOW TO ENTER — PRIVATE, NOT IN THIS GROUP*',
     `1. DM the bot: *${registrationTemplate}*`,
-    `2. Payment: ${tournament.paymentInstructions}`,
-    '3. Send proof to the organizer privately.',
-    '4. Your slot is confirmed only after admin approval.',
+    '2. The bot replies privately with the payment account and your reference.',
+    `3. Send the receipt back to the bot with *${env.prefix}tourproof ${tournament.code}* as its caption.`,
+    '4. Your slot is confirmed only after the organizer verifies the actual bank credit.',
     dmLink ? `\n👉 *Register privately:* ${dmLink}` : '',
     '',
     '⚠️ First 40 verified payments enter. No hacks, scripts, teaming or account switching.',
@@ -355,6 +395,7 @@ export function tournamentErrorMessage(error: unknown): string {
     ALREADY_REGISTERED: 'That WhatsApp account or Free Fire UID is already registered.',
     TOURNAMENT_FULL: 'All 40 paid slots are already filled.',
     PLAYER_NOT_FOUND: 'No registered player matches that UID or phone number.',
+    PAYMENT_NOT_PENDING: 'This registration is not waiting for payment verification.',
     TOURNAMENT_CLOSED: 'That tournament is already closed.',
     CHECKIN_CLOSED: 'Check-in has not opened yet.',
     PLAYER_NOT_APPROVED: 'Only paid and approved players can check in.',

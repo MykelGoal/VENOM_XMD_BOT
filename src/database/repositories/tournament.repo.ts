@@ -51,6 +51,7 @@ export const tournamentRepo = {
     eventDate: string;
     paymentInstructions: string;
     createdByJid: string;
+    createdByDmJid: string;
     createdByNumber: string;
   }): TournamentModel {
     const code = normalizeTournamentCode(input.code);
@@ -72,6 +73,7 @@ export const tournamentRepo = {
       prizes: { first: 25000, second: 10000, third: 5000 },
       status: 'registration',
       createdByJid: input.createdByJid,
+      createdByDmJid: input.createdByDmJid,
       createdByNumber: normalizeIdentity(input.createdByNumber),
       participants: [],
       announcedMilestones: [],
@@ -187,6 +189,21 @@ export const tournamentRepo = {
     player.approvedAt = undefined;
     player.approvedBy = undefined;
     player.checkedInAt = undefined;
+    save(tournament);
+    return { tournament, player };
+  },
+
+  markPaymentProof(
+    code: string,
+    identity: string,
+  ): { tournament: TournamentModel; player: TournamentPlayer } {
+    const tournament = getRequired(code);
+    const player = tournamentRepo.findPlayer(code, identity);
+    if (!player) throw new Error('PLAYER_NOT_FOUND');
+    if (player.paymentStatus !== 'pending') {
+      throw new Error('PAYMENT_NOT_PENDING');
+    }
+    player.paymentProofSubmittedAt = Date.now();
     save(tournament);
     return { tournament, player };
   },

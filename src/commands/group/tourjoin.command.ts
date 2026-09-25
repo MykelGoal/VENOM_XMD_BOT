@@ -76,10 +76,13 @@ const tourjoin: Command = {
           `🎮 Nickname: ${nickname}`,
           `🆔 UID: ${freeFireUid}`,
           '',
-          `💳 Entry: ₦${tournament.entryFeeNaira.toLocaleString('en-NG')}`,
-          `Payment: ${tournament.paymentInstructions}`,
+          '⏳ Status: *Pending payment verification*',
           '',
-          'Send your payment proof to the organizer privately. Your slot becomes official only after the organizer verifies the actual transfer and approves you.',
+          `💳 *Pay ₦${tournament.entryFeeNaira.toLocaleString('en-NG')} to:*`,
+          tournament.paymentInstructions,
+          `🧾 Transfer reference/narration: *${tournament.code}-${freeFireUid.slice(-4)}*`,
+          '',
+          `After payment, send the receipt screenshot/document here with *${prefix}tourproof ${tournament.code}* as its caption. Your slot becomes official only after the organizer verifies the actual bank credit.`,
         ].join('\n'),
       );
     } catch (err) {
