@@ -1,5 +1,8 @@
-import type { WASocket } from '@whiskeysockets/baileys';
-import type { ParticipantAction } from '@whiskeysockets/baileys';
+import type {
+  GroupMetadata,
+  ParticipantAction,
+  WASocket,
+} from '@whiskeysockets/baileys';
 import { store } from '../core/store';
 import { logger } from '../utils/logger';
 import { groupRepo } from '../database/repositories/group.repo';
@@ -10,6 +13,30 @@ interface GroupParticipantsUpdate {
   participants: string[];
   action: ParticipantAction;
   author?: string;
+}
+
+/**
+ * Audit group setting changes received from WhatsApp. This never schedules or
+ * changes a lock itself; it records whether an admin/another linked bot changed
+ * the announcement-only state so unexpected nighttime locks can be traced.
+ */
+export function handleGroupMetadataUpdates(
+  updates: Partial<GroupMetadata>[],
+): void {
+  for (const update of updates) {
+    if (!update.id) continue;
+    store.clearGroup(update.id);
+    if (typeof update.announce !== 'boolean') continue;
+    const author = (update as Partial<GroupMetadata> & { author?: string }).author;
+    logger.info(
+      {
+        groupJid: update.id,
+        author,
+        postingMode: update.announce ? 'admins-only' : 'all-members',
+      },
+      'Group posting permission changed',
+    );
+  }
 }
 
 /**

@@ -93,9 +93,11 @@ function serialized(group, sender, id, body = 'message') {
 }
 
 test('production command registry loads every command and resolves aliases', () => {
-  assert.ok(commands.size >= 400, `expected at least 400 commands, got ${commands.size}`);
+  assert.ok(commands.size >= 447, `expected at least 447 commands, got ${commands.size}`);
   assert.equal(resolveCommand('help')?.name, 'help');
   assert.equal(resolveCommand('h')?.name, 'help');
+  assert.equal(resolveCommand('tourcreate')?.name, 'tourcreate');
+  assert.equal(resolveCommand('tour')?.name, 'tourhelp');
 });
 
 test('link detector catches protocol, bare-domain and WhatsApp links', () => {

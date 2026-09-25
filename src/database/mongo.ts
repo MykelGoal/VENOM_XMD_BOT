@@ -3,10 +3,10 @@ import { env } from '../config';
 import { logger } from '../utils/logger';
 
 /**
- * Optional MongoDB persistence for MONEY records.
+ * Optional MongoDB persistence for durable bot records.
  *
- * Why: hosts like Render (free tier) wipe the filesystem on every
- * redeploy — local JSON wallets would vanish along with people's money.
+ * Why: hosts like Render (free tier) wipe the filesystem on every redeploy.
+ * Wallets, pending payments and live tournament state must survive that.
  *
  * How (write-behind mirror, zero changes to the sync repo API):
  *   • The JSON collections stay the working store (repos stay synchronous).
@@ -16,14 +16,13 @@ import { logger } from '../utils/logger';
  *     local state), so a redeploy can never wipe a wallet. If Mongo is
  *     empty but local files have records (owner just added MONGO_URI),
  *     local data is SEEDED up to Mongo instead of being wiped.
- *   • Money-critical paths call flushMongo() before sending receipts, so
- *     "delivered" always implies "recorded".
+ *   • Critical paths call flushMongo() before confirming success, so
+ *     "confirmed" means the durable write queue has completed.
  *
- * Money collections only — sessions/keys/chat-memory already have their
- * own persistence (SESSION_ID, host env vars, MEMORY_URL).
+ * Sessions/keys/chat-memory already have their own persistence mechanisms.
  */
 
-const MIRRORED = ['wallets', 'walletledger', 'vtupending'];
+const MIRRORED = ['wallets', 'walletledger', 'vtupending', 'tournaments'];
 
 let client: MongoClient | null = null;
 let db: ReturnType<MongoClient['db']> | null = null;
@@ -41,8 +40,8 @@ export async function initMongo(): Promise<void> {
   const uri = env.storage.mongoUri.trim();
   if (!uri) {
     logger.info(
-      '🗄️  MONGO_URI not set — money records live in local files only. ' +
-        '(Fine locally; on hosts that wipe the disk (Render free), set MONGO_URI or wallets reset on redeploy.)',
+      '🗄️  MONGO_URI not set — durable records live in local files only. ' +
+        '(Fine locally; on ephemeral hosts, wallets and tournaments require MongoDB to survive redeploys.)',
     );
     return;
   }
@@ -52,7 +51,9 @@ export async function initMongo(): Promise<void> {
     db = client.db(env.storage.mongoDb.trim() || 'venomxmd');
     await db.command({ ping: 1 });
     enabled = true;
-    logger.info('🗄️  MongoDB connected — wallets & money records are redeploy-proof.');
+    logger.info(
+      '🗄️  MongoDB connected — wallets, payments and tournaments are redeploy-proof.',
+    );
   } catch (err) {
     client = null;
     db = null;
@@ -102,8 +103,8 @@ export function flushMongo(): Promise<void> {
 }
 
 /**
- * Pull the mirrored collections from Mongo into the JSON store.
- * Call ONCE at boot, before anything touches the wallets.
+ * Pull mirrored collections from Mongo into the JSON store.
+ * Call once at boot before wallets, payments or tournaments are used.
  */
 export async function hydrateMirroredCollections(): Promise<void> {
   if (!enabled || !db) return;

@@ -1,6 +1,9 @@
 import type { WASocket } from '@whiskeysockets/baileys';
 import { handleMessageUpsert } from './message.handler';
-import { handleGroupParticipantsUpdate } from './group.handler';
+import {
+  handleGroupMetadataUpdates,
+  handleGroupParticipantsUpdate,
+} from './group.handler';
 import { handleCall } from './call.handler';
 import { handleAntiDelete } from './antidelete.handler';
 import { safe } from './error.handler';
@@ -21,6 +24,10 @@ export function registerEventHandlers(sock: WASocket): void {
       handleGroupParticipantsUpdate(sock, update),
     ),
   );
+
+  sock.ev.on('groups.update', (updates) => {
+    handleGroupMetadataUpdates(updates);
+  });
 
   sock.ev.on('call', (calls) =>
     safe('call', () => handleCall(sock, calls as any)),

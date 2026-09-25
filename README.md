@@ -6,7 +6,7 @@
 
 # 🕷️ VENOM-XMD
 
-**Multi-device WhatsApp bot · 434 commands · [Baileys](https://github.com/WhiskeySockets/Baileys) + TypeScript**
+**Multi-device WhatsApp bot · 447 commands · [Baileys](https://github.com/WhiskeySockets/Baileys) + TypeScript**
 
 <br/>
 
@@ -75,6 +75,21 @@
 
 ---
 
+## 🏆 Quiet Free Fire tournaments
+
+Run a 40-player, ₦1,000-entry solo tournament without flooding the group:
+
+- `.tourcreate CODE | date/time | payment instructions` posts one launch announcement and tags members once.
+- Players register and check in privately with `.tourjoin` / `.tourcheckin`.
+- Admins verify real transfers privately with `.tourapprove`; the group sees only 10/20/30/40 milestones.
+- Room IDs and passwords go only to checked-in players in DM.
+- `.tourround`, `.tourstandings`, and `.tourfinish` calculate and publish controlled round/final updates.
+- The complete roster, payment state, check-ins and scores are mirrored to MongoDB and restored before WhatsApp reconnects after a redeploy.
+
+Run `.tourhelp` for the complete organizer workflow. Tournament creation intentionally refuses to start when MongoDB is unavailable, preventing silent data loss on ephemeral hosts.
+
+---
+
 ## 💳 VTU — sell data & airtime (optional, owner-activated)
 
 Turn the bot into a mini VTU shop with **your own** [Flutterwave](https://flutterwave.com) account (free). One command to activate:
@@ -100,7 +115,7 @@ The key is stored in the bot's private database — it never touches the repo. (
 
 *Note (merchant mode): Flutterwave charges bills to your Flutterwave balance, so keep it funded — check it anytime with `.vtu`.*
 
-**⚠️ VTU owners on Render free tier:** redeploys wipe the bot's local files — including wallets. Set a **free** [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) connection string as `MONGO_URI` and wallets/ledger/pending payments are mirrored to it and restored on every boot (`.vtu` shows the storage status). Without it the bot still works, but balances reset on redeploy.
+**⚠️ Durable storage on Render free tier:** redeploys wipe local files. Set a **free** [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) connection string as `MONGO_URI`; wallets, ledgers, pending payments and tournament state are mirrored and restored on every boot. VTU can fall back to local files, but tournament creation requires MongoDB so registrations cannot disappear.
 
 ---
 

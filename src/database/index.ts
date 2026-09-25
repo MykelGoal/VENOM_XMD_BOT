@@ -15,6 +15,7 @@ const DURABLE_COLLECTIONS = new Set([
   'wallets',
   'walletledger',
   'vtupending',
+  'tournaments',
 ]);
 
 /** Registry of live collections (Mongo hydration and graceful shutdown). */

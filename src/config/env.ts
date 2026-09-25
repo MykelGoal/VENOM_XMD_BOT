@@ -165,11 +165,10 @@ export const env = {
     marginPct: num('VTU_MARGIN', 3),
   },
 
-  // Optional MongoDB persistence for MONEY records (wallets, ledger,
-  // pending payments). STRONGLY recommended for VTU owners on hosts with
-  // ephemeral disks (Render free tier wipes files on every redeploy).
-  // Free 512MB cluster at mongodb.com/atlas → Database Access → connect
-  // string goes here. Without it the bot still works — local JSON only.
+  // Optional MongoDB persistence for durable records: wallets, ledger,
+  // pending payments and tournaments. Required for tournament creation on
+  // ephemeral hosts so registrations and scores survive every redeploy.
+  // Keep the URI in host environment variables — never commit it to source.
   storage: {
     mongoUri: optional('MONGO_URI', ''),
     mongoDb: optional('MONGO_DB', 'venomxmd'),

@@ -45,10 +45,9 @@ async function main(): Promise<void> {
   // it synced (no-op unless the owner set MEMORY_URL).
   startMemorySync();
 
-  // Optional MongoDB persistence for money records (wallets, ledger,
-  // pending payments). Runs BEFORE the connection so the VTU payment
-  // watcher resumes against fully-hydrated wallets. No-op without
-  // MONGO_URI (local JSON files are used instead).
+  // Optional MongoDB persistence for wallets, payments and tournaments.
+  // Runs BEFORE the WhatsApp connection so durable state is fully hydrated
+  // before commands or the VTU watcher can use it.
   await initMongo();
   await hydrateMirroredCollections();
 
