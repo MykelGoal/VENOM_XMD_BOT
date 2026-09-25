@@ -6,6 +6,7 @@ import { restoreSessionFromEnv } from './core/session';
 import { startKeepAlive } from './core/keepalive';
 import { startMemorySync } from './services/memorysync.service';
 import { initMongo, hydrateMirroredCollections } from './database/mongo';
+import './database/repositories/register';
 import { initBaileys } from './core/baileys';
 
 const BANNER = `
@@ -45,9 +46,9 @@ async function main(): Promise<void> {
   // it synced (no-op unless the owner set MEMORY_URL).
   startMemorySync();
 
-  // Optional MongoDB persistence for wallets, payments and tournaments.
-  // Runs BEFORE the WhatsApp connection so durable state is fully hydrated
-  // before commands or the VTU watcher can use it.
+  // MongoDB persistence for operational state (settings, users, wallets,
+  // payments and tournaments). Runs before WhatsApp so a redeploy restores
+  // everything before any command or event handler can use it.
   await initMongo();
   await hydrateMirroredCollections();
 

@@ -88,6 +88,8 @@ Run a 40-player, ₦1,000-entry solo tournament without flooding the group:
 
 Run `.tourhelp` for the complete organizer workflow. Tournament creation intentionally refuses to start when MongoDB is unavailable, preventing silent data loss on ephemeral hosts.
 
+With `MONGO_URI` configured, the same startup hydration also preserves group settings, access roles, users, economy records, notes, warnings, voice model IDs, wallets and payment state. Chat memory and WhatsApp sessions keep their dedicated persistence mechanisms.
+
 ---
 
 ## 💳 VTU — sell data & airtime (optional, owner-activated)
@@ -115,7 +117,7 @@ The key is stored in the bot's private database — it never touches the repo. (
 
 *Note (merchant mode): Flutterwave charges bills to your Flutterwave balance, so keep it funded — check it anytime with `.vtu`.*
 
-**⚠️ Durable storage on Render free tier:** redeploys wipe local files. Set a **free** [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) connection string as `MONGO_URI`; wallets, ledgers, pending payments and tournament state are mirrored and restored on every boot. VTU can fall back to local files, but tournament creation requires MongoDB so registrations cannot disappear.
+**⚠️ Durable storage on Render free tier:** redeploys wipe local files. Set a **free** [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) connection string as `MONGO_URI`; operational settings and records are mirrored and restored on every boot. VTU can fall back to local files, but tournament creation requires MongoDB so registrations cannot disappear.
 
 ---
 

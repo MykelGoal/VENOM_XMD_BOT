@@ -165,9 +165,10 @@ export const env = {
     marginPct: num('VTU_MARGIN', 3),
   },
 
-  // Optional MongoDB persistence for durable records: wallets, ledger,
-  // pending payments and tournaments. Required for tournament creation on
-  // ephemeral hosts so registrations and scores survive every redeploy.
+  // MongoDB persistence for operational state: group settings, access lists,
+  // users, economy, notes, warnings, wallets, payments and tournaments.
+  // Required for tournament creation on ephemeral hosts. Chat memory and
+  // WhatsApp sessions retain their dedicated persistence paths.
   // Keep the URI in host environment variables — never commit it to source.
   storage: {
     mongoUri: optional('MONGO_URI', ''),

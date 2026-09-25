@@ -6,7 +6,8 @@ import { logger } from '../utils/logger';
  * Optional MongoDB persistence for durable bot records.
  *
  * Why: hosts like Render (free tier) wipe the filesystem on every redeploy.
- * Wallets, pending payments and live tournament state must survive that.
+ * Group settings, access lists, user data, wallets and live tournament state
+ * must survive that.
  *
  * How (write-behind mirror, zero changes to the sync repo API):
  *   • The JSON collections stay the working store (repos stay synchronous).
@@ -19,10 +20,25 @@ import { logger } from '../utils/logger';
  *   • Critical paths call flushMongo() before confirming success, so
  *     "confirmed" means the durable write queue has completed.
  *
- * Sessions/keys/chat-memory already have their own persistence mechanisms.
+ * WhatsApp sessions and bounded AI chat memory retain dedicated persistence.
  */
 
-const MIRRORED = ['wallets', 'walletledger', 'vtupending', 'tournaments'];
+const MIRRORED = [
+  'access',
+  'afk',
+  'economy',
+  'groups',
+  'groupstats',
+  'notes',
+  'settings',
+  'tournaments',
+  'users',
+  'voiceclones',
+  'wallets',
+  'walletledger',
+  'vtupending',
+  'warns',
+];
 
 let client: MongoClient | null = null;
 let db: ReturnType<MongoClient['db']> | null = null;
@@ -40,8 +56,8 @@ export async function initMongo(): Promise<void> {
   const uri = env.storage.mongoUri.trim();
   if (!uri) {
     logger.info(
-      '🗄️  MONGO_URI not set — durable records live in local files only. ' +
-        '(Fine locally; on ephemeral hosts, wallets and tournaments require MongoDB to survive redeploys.)',
+      '🗄️  MONGO_URI not set — operational records live in local files only. ' +
+        '(Fine locally; on ephemeral hosts, settings, wallets and tournaments need MongoDB to survive redeploys.)',
     );
     return;
   }
@@ -52,7 +68,7 @@ export async function initMongo(): Promise<void> {
     await db.command({ ping: 1 });
     enabled = true;
     logger.info(
-      '🗄️  MongoDB connected — wallets, payments and tournaments are redeploy-proof.',
+      '🗄️  MongoDB connected — operational settings and records are redeploy-proof.',
     );
   } catch (err) {
     client = null;
@@ -103,8 +119,8 @@ export function flushMongo(): Promise<void> {
 }
 
 /**
- * Pull mirrored collections from Mongo into the JSON store.
- * Call once at boot before wallets, payments or tournaments are used.
+ * Pull mirrored operational collections from Mongo into the JSON store.
+ * Call once at boot before the WhatsApp connection starts.
  */
 export async function hydrateMirroredCollections(): Promise<void> {
   if (!enabled || !db) return;
@@ -126,4 +142,6 @@ export async function hydrateMirroredCollections(): Promise<void> {
       logger.warn({ err }, `mongo hydration failed for "${name}" — using local file`);
     }
   }
+  // Do not connect to WhatsApp until every local-to-Mongo seed is durable.
+  await flushMongo();
 }
