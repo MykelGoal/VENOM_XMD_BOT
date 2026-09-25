@@ -4,10 +4,12 @@ import {
   flushTournament,
   resolveTournamentGroupJid,
   tournamentErrorMessage,
+  tournamentOwnerJid,
   tournamentStorageReady,
 } from '../../services/tournament.service';
 import { reply } from '../../services/message.service';
 import { jidToNumber } from '../../utils/helpers';
+import { logger } from '../../utils/logger';
 
 const tourjoin: Command = {
   name: 'tourjoin',
@@ -68,6 +70,24 @@ const tourjoin: Command = {
         freeFireUid,
       });
       await flushTournament();
+      await sock
+        .sendMessage(tournamentOwnerJid(tournament), {
+          text: [
+            `🆕 *NEW REGISTRATION — ${tournament.code}*`,
+            `Player: ${nickname}`,
+            `Free Fire UID: ${freeFireUid}`,
+            `WhatsApp: ${msg.senderNumber}`,
+            'Status: ⏳ waiting for payment proof',
+            '',
+            `_The receipt will be forwarded here after the player submits ${prefix}tourproof._`,
+          ].join('\n'),
+        })
+        .catch((err) =>
+          logger.warn(
+            { err, tournament: tournament.code },
+            'Could not deliver tournament registration alert to owner',
+          ),
+        );
       await reply(
         sock,
         msg,

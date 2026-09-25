@@ -8,6 +8,7 @@ const assert = require('node:assert/strict');
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'venom-tour-test-'));
 process.env.VENOM_DATA_DIR = dataDir;
+process.env.OWNER_NUMBER = '2348111111111';
 
 const {
   flushLocalCollections,
@@ -22,7 +23,9 @@ const {
   placementPoints,
   postRegistrationMilestone,
   sendTournamentAnnouncement,
+  sendTournamentDailyReminder,
   setTournamentPaymentAccount,
+  tournamentOwnerJid,
 } = require('../dist/services/tournament.service');
 
 function createTournament(code) {
@@ -55,6 +58,11 @@ function registerAndApprove(code, index) {
 after(() => {
   flushLocalCollections();
   fs.rmSync(dataDir, { recursive: true, force: true });
+});
+
+test('owner notifications always target OWNER_NUMBER, not the bot number', () => {
+  const tournament = createTournament('OWNERDM');
+  assert.equal(tournamentOwnerJid(tournament), '2348111111111@s.whatsapp.net');
 });
 
 test('payment account is stored persistently and returned for private replies', () => {
@@ -109,10 +117,35 @@ test('launch announcement is one message mentioning all members once', async () 
   assert.equal(sent[0].jid, tournament.groupJid);
   assert.equal(sent[0].content.mentions.length, 70);
   assert.equal(new Set(sent[0].content.mentions).size, 70);
-  assert.match(sent[0].content.text, /VENOM FREE FIRE SOLO TOURNAMENT/);
-  assert.match(sent[0].content.text, /payment account and your reference/);
+  assert.match(sent[0].content.text, /FREE FIRE SOLO TOURNAMENT/);
+  assert.match(sent[0].content.text, /bot sends the account, reference/);
   assert.doesNotMatch(sent[0].content.text, /Contact the organizer privately/);
-  assert.match(sent[0].content.text, /Registration confirmations and room passwords are sent privately/);
+  assert.doesNotMatch(sent[0].content.text, /@1@lid|Group members notified/);
+  assert.ok(sent[0].content.text.length < 1200, 'announcement should stay compact');
+});
+
+test('daily reminder hidden-tags only members who are not approved', async () => {
+  const tournament = createTournament('REMIND');
+  registerAndApprove(tournament.code, 1);
+  const sent = [];
+  const sock = {
+    user: { id: '999@s.whatsapp.net' },
+    groupMetadata: async () => ({
+      id: tournament.groupJid,
+      subject: tournament.groupName,
+      participants: [
+        { id: '1@lid', admin: null },
+        { id: '2@lid', admin: null },
+        { id: '999@s.whatsapp.net', admin: 'admin' },
+      ],
+    }),
+    sendMessage: async (jid, content) => sent.push({ jid, content }),
+  };
+
+  assert.equal(await sendTournamentDailyReminder(sock, tournament), true);
+  assert.deepEqual(sent[0].content.mentions, ['2@lid']);
+  assert.match(sent[0].content.text, /39 remaining/);
+  assert.ok(sent[0].content.text.length < 600, 'daily reminder should be short');
 });
 
 test('registration milestones post only once at 10/20/30/40', async () => {
@@ -178,6 +211,8 @@ test('tournament state is durable locally and can be hydrated from Mongo shape',
     createdByNumber: '1',
     participants: [],
     announcedMilestones: [],
+    reminderEnabled: true,
+    reminderTime: '18:00',
     roomSentRounds: [],
     standingsPostedRounds: [],
     completedRounds: [],

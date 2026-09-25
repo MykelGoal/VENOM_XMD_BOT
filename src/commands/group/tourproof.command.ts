@@ -3,10 +3,10 @@ import { tournamentRepo } from '../../database/repositories/tournament.repo';
 import {
   flushTournament,
   tournamentErrorMessage,
+  tournamentOwnerJid,
   tournamentStorageReady,
 } from '../../services/tournament.service';
 import { reply } from '../../services/message.service';
-import { numberToJid } from '../../utils/helpers';
 
 const tourproof: Command = {
   name: 'tourproof',
@@ -47,8 +47,7 @@ const tourproof: Command = {
         throw new Error('PAYMENT_NOT_PENDING');
       }
 
-      const organizerJid =
-        tournament.createdByDmJid || numberToJid(tournament.createdByNumber);
+      const organizerJid = tournamentOwnerJid(tournament);
       await sock.sendMessage(organizerJid, {
         text: [
           `🧾 *NEW PAYMENT PROOF — ${tournament.code}*`,

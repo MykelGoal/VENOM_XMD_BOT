@@ -44,6 +44,10 @@ export const tournamentRepo = {
     return tournaments.get(normalizeTournamentCode(code));
   },
 
+  all(): TournamentModel[] {
+    return tournaments.all();
+  },
+
   create(input: {
     code: string;
     groupJid: string;
@@ -77,6 +81,8 @@ export const tournamentRepo = {
       createdByNumber: normalizeIdentity(input.createdByNumber),
       participants: [],
       announcedMilestones: [],
+      reminderEnabled: true,
+      reminderTime: '18:00',
       roomSentRounds: [],
       standingsPostedRounds: [],
       completedRounds: [],
@@ -338,6 +344,24 @@ export const tournamentRepo = {
   markAnnouncementSent(code: string): TournamentModel {
     const tournament = getRequired(code);
     tournament.announcementSentAt = Date.now();
+    return save(tournament);
+  },
+
+  configureReminder(
+    code: string,
+    enabled: boolean,
+    time = '18:00',
+  ): TournamentModel {
+    const tournament = getRequired(code);
+    tournament.reminderEnabled = enabled;
+    tournament.reminderTime = time;
+    if (!enabled) tournament.lastReminderDate = undefined;
+    return save(tournament);
+  },
+
+  markReminderSent(code: string, date: string): TournamentModel {
+    const tournament = getRequired(code);
+    tournament.lastReminderDate = date;
     return save(tournament);
   },
 

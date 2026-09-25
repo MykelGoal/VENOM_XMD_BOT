@@ -93,12 +93,13 @@ function serialized(group, sender, id, body = 'message') {
 }
 
 test('production command registry loads every command and resolves aliases', () => {
-  assert.ok(commands.size >= 449, `expected at least 449 commands, got ${commands.size}`);
+  assert.ok(commands.size >= 450, `expected at least 450 commands, got ${commands.size}`);
   assert.equal(resolveCommand('help')?.name, 'help');
   assert.equal(resolveCommand('h')?.name, 'help');
   assert.equal(resolveCommand('tourcreate')?.name, 'tourcreate');
   assert.equal(resolveCommand('touraccount')?.name, 'touraccount');
   assert.equal(resolveCommand('tourproof')?.name, 'tourproof');
+  assert.equal(resolveCommand('tourreminder')?.name, 'tourreminder');
   assert.equal(resolveCommand('tour')?.name, 'tourhelp');
 });
 

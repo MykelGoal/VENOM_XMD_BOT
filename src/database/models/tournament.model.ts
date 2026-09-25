@@ -58,6 +58,9 @@ export interface TournamentModel extends Record<string, unknown> {
   participants: TournamentPlayer[];
   announcedMilestones: number[];
   announcementSentAt?: number;
+  reminderEnabled: boolean;
+  reminderTime: string;
+  lastReminderDate?: string;
   checkinOpenedAt?: number;
   roomSentRounds: number[];
   standingsPostedRounds: number[];

@@ -6,11 +6,11 @@
 
 # 🕷️ VENOM-XMD
 
-**Multi-device WhatsApp bot · 449 commands · [Baileys](https://github.com/WhiskeySockets/Baileys) + TypeScript**
+**Multi-device WhatsApp bot · 450 commands · [Baileys](https://github.com/WhiskeySockets/Baileys) + TypeScript**
 
 <br/>
 
-<img src="https://img.shields.io/badge/commands-449-39ff88?style=for-the-badge&labelColor=050806" alt="commands"/>
+<img src="https://img.shields.io/badge/commands-450-39ff88?style=for-the-badge&labelColor=050806" alt="commands"/>
 <img src="https://img.shields.io/badge/language-TypeScript-3178c6?style=for-the-badge&labelColor=050806" alt="typescript"/>
 <img src="https://img.shields.io/badge/baileys-multi--device-00d95f?style=for-the-badge&labelColor=050806" alt="baileys"/>
 <img src="https://img.shields.io/badge/node-%E2%89%A520-39ff88?style=for-the-badge&labelColor=050806" alt="node"/>
@@ -69,7 +69,7 @@
 
 **Send <kbd>.menu</kbd> — then try <kbd>.ai</kbd> <kbd>.play</kbd> <kbd>.sticker</kbd> <kbd>.weather</kbd> <kbd>.waifu</kbd>**
 
-**449 commands. One menu. 🎉**
+**450 commands. One menu. 🎉**
 
 </div>
 
@@ -82,8 +82,9 @@ Run a 40-player, ₦1,000-entry solo tournament without flooding the group:
 - The owner saves the payout account privately once with `.touraccount BANK | NUMBER | NAME`.
 - `.tourcreate CODE | date/time` posts one launch announcement and tags members once—without exposing the account.
 - Players register with `.tourjoin`; the bot replies in DM with payment details and a unique transfer reference.
-- Receipt images/PDFs sent with `.tourproof` are forwarded privately to the organizer for real bank-app verification.
-- Admins approve privately with `.tourapprove`; the group sees only 10/20/30/40 milestones.
+- Receipt images/PDFs sent with `.tourproof` are forwarded privately to the first configured `OWNER_NUMBER` for real bank-app verification.
+- Admins approve privately with `.tourapprove`; the owner number receives every registration summary and forwarded receipt.
+- One compact hidden-tag reminder runs daily at 6 PM WAT, excluding already-approved players; `.tourreminder` can change or disable it.
 - Room IDs and passwords go only to checked-in players in DM.
 - `.tourround`, `.tourstandings`, and `.tourfinish` calculate and publish controlled round/final updates.
 - The complete roster, payment state, check-ins and scores are mirrored to MongoDB and restored before WhatsApp reconnects after a redeploy.

@@ -78,7 +78,7 @@ const tourcreate: Command = {
         await reply(
           sock,
           msg,
-          `✅ Tournament *${tournament.code}* created and announced. Everyone was tagged once; registrations and payment confirmations will stay private.`,
+          `✅ Tournament *${tournament.code}* created. Everyone received one hidden-tag announcement; a short reminder will run daily at 6:00 PM WAT until registration closes. Registrations and payments stay private.`,
         );
       } catch {
         await reply(

@@ -68,6 +68,13 @@ export async function flushTournament(): Promise<void> {
   await flushMongo();
 }
 
+export function tournamentOwnerJid(tournament: TournamentModel): string {
+  const owner = env.ownerNumbers[0];
+  return owner
+    ? numberToJid(owner)
+    : tournament.createdByDmJid || numberToJid(tournament.createdByNumber);
+}
+
 export async function canManageTournament(
   sock: WASocket,
   msg: SerializedMessage,
@@ -106,58 +113,99 @@ export async function resolveTournamentGroupJid(
   }
 }
 
-/** One compact launch message; all group members are mentioned exactly once. */
+function registrationDetails(sock: WASocket, tournament: TournamentModel) {
+  const command = `${env.prefix}tourjoin ${tournament.code} Nickname | FreeFireUID`;
+  const botNumber = jidToNumber(sock.user?.id ?? '');
+  const link = botNumber
+    ? `https://wa.me/${botNumber}?text=${encodeURIComponent(command)}`
+    : '';
+  return { command, link };
+}
+
+/** Resolve hidden-mention targets, optionally excluding approved players. */
+async function tournamentMentionTargets(
+  sock: WASocket,
+  tournament: TournamentModel,
+  excludeApproved: boolean,
+): Promise<string[]> {
+  const metadata = await getGroupMetadata(sock, tournament.groupJid);
+  const botNumbers = new Set(
+    [sock.user?.id, sock.user?.lid]
+      .filter((jid): jid is string => Boolean(jid))
+      .map(jidToNumber),
+  );
+  const approved = tournament.participants.filter(
+    (player) => player.paymentStatus === 'approved',
+  );
+  const approvedJids = new Set(
+    approved.map((player) => player.groupJid).filter(Boolean),
+  );
+  const approvedNumbers = new Set(approved.map((player) => player.number));
+
+  return metadata.participants
+    .filter((participant) => {
+      if (botNumbers.has(jidToNumber(participant.id))) return false;
+      if (!excludeApproved) return true;
+      const identities = [participant.id, participant.jid, participant.lid].filter(
+        (jid): jid is string => Boolean(jid),
+      );
+      return !identities.some(
+        (jid) => approvedJids.has(jid) || approvedNumbers.has(jidToNumber(jid)),
+      );
+    })
+    .map((participant) => participant.id);
+}
+
+/** One short launch message with a hidden mention—no wall of 70 usernames. */
 export async function sendTournamentAnnouncement(
   sock: WASocket,
   tournament: TournamentModel,
 ): Promise<void> {
-  const metadata = await getGroupMetadata(sock, tournament.groupJid);
-  const botIds = [sock.user?.id, sock.user?.lid]
-    .filter((jid): jid is string => Boolean(jid))
-    .map(jidToNumber);
-  const members = metadata.participants
-    .map((participant) => participant.id)
-    .filter((jid) => !botIds.includes(jidToNumber(jid)));
-  const botNumber = jidToNumber(sock.user?.id ?? '');
-  const registrationTemplate = `${env.prefix}tourjoin ${tournament.code} Nickname | FreeFireUID`;
-  const dmLink = botNumber
-    ? `https://wa.me/${botNumber}?text=${encodeURIComponent(registrationTemplate)}`
-    : '';
-  const tags = members.map((jid) => `@${jidToNumber(jid)}`).join(' ');
-
+  const members = await tournamentMentionTargets(sock, tournament, false);
+  const registration = registrationDetails(sock, tournament);
   const text = [
-    '🔥🏆 *VENOM FREE FIRE SOLO TOURNAMENT* 🏆🔥',
+    '🔥🏆 *₦40,000 FREE FIRE SOLO TOURNAMENT*',
+    `📅 ${tournament.eventDate}`,
+    `🎟️ Code: *${tournament.code}* · Entry: *₦${tournament.entryFeeNaira.toLocaleString('en-NG')}*`,
+    `👥 ${tournament.maxPlayers} paid slots · 3 custom-room matches`,
     '',
-    `🎟️ *Tournament code:* ${tournament.code}`,
-    `📅 *Date/time:* ${tournament.eventDate}`,
-    `👥 *Slots:* ${tournament.maxPlayers} verified players`,
-    `💳 *Entry:* ₦${tournament.entryFeeNaira.toLocaleString('en-NG')}`,
+    `🥇 ₦${tournament.prizes.first.toLocaleString('en-NG')}  🥈 ₦${tournament.prizes.second.toLocaleString('en-NG')}  🥉 ₦${tournament.prizes.third.toLocaleString('en-NG')}`,
     '',
-    '💰 *PRIZES*',
-    `🥇 1st — ₦${tournament.prizes.first.toLocaleString('en-NG')}`,
-    `🥈 2nd — ₦${tournament.prizes.second.toLocaleString('en-NG')}`,
-    `🥉 3rd — ₦${tournament.prizes.third.toLocaleString('en-NG')}`,
+    '🔐 *Register privately:*',
+    registration.link || `DM the bot: *${registration.command}*`,
+    'The bot sends the account, reference and receipt instructions in DM.',
     '',
-    '🎮 *Format:* 3 solo custom-room matches',
-    '📊 Placement points + 1 point per kill',
-    '',
-    '📝 *HOW TO ENTER — PRIVATE, NOT IN THIS GROUP*',
-    `1. DM the bot: *${registrationTemplate}*`,
-    '2. The bot replies privately with the payment account and your reference.',
-    `3. Send the receipt back to the bot with *${env.prefix}tourproof ${tournament.code}* as its caption.`,
-    '4. Your slot is confirmed only after the organizer verifies the actual bank credit.',
-    dmLink ? `\n👉 *Register privately:* ${dmLink}` : '',
-    '',
-    '⚠️ First 40 verified payments enter. No hacks, scripts, teaming or account switching.',
-    '_Registration confirmations and room passwords are sent privately to avoid group spam._',
-    '',
-    '📣 *Group members notified once:*',
-    tags,
-  ]
-    .filter(Boolean)
-    .join('\n');
+    '⚠️ First 40 verified payments enter. No hacks, teaming or account switching.',
+    '_Everyone was notified with a hidden tag; private details stay out of the group._',
+  ].join('\n');
 
   await sock.sendMessage(tournament.groupJid, { text, mentions: members });
+}
+
+/** One short 6 PM reminder, hidden-tagging only members not yet approved. */
+export async function sendTournamentDailyReminder(
+  sock: WASocket,
+  tournament: TournamentModel,
+): Promise<boolean> {
+  const approved = tournament.participants.filter(
+    (player) => player.paymentStatus === 'approved',
+  ).length;
+  if (tournament.status !== 'registration' || approved >= tournament.maxPlayers) {
+    return false;
+  }
+  const targets = await tournamentMentionTargets(sock, tournament, true);
+  const registration = registrationDetails(sock, tournament);
+  await sock.sendMessage(tournament.groupJid, {
+    text: [
+      `⏰ *${tournament.code} TOURNAMENT REMINDER*`,
+      `✅ ${approved}/${tournament.maxPlayers} paid slots confirmed · ${tournament.maxPlayers - approved} remaining`,
+      `📅 ${tournament.eventDate}`,
+      registration.link || `DM the bot: *${registration.command}*`,
+      '_Already-approved players were excluded from this reminder._',
+    ].join('\n'),
+    mentions: targets,
+  });
+  return true;
 }
 
 /** Post only 10/20/30/40-player milestones, never every approval. */
@@ -206,6 +254,7 @@ export function tournamentStatusText(tournament: TournamentModel): string {
     `⏳ Pending verification: ${pending}`,
     `🎮 Checked in: ${checkedIn}/${approved}`,
     `🗺️ Rounds recorded: ${tournament.completedRounds.join(', ') || 'none'}`,
+    `⏰ Daily reminder: ${tournament.reminderEnabled !== false ? `${tournament.reminderTime || '18:00'} WAT` : 'off'}`,
     `💾 Storage: ${isMongoEnabled() ? 'MongoDB (redeploy-safe)' : 'local only ⚠️'}`,
   ].join('\n');
 }
