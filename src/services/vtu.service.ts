@@ -1,10 +1,10 @@
 /**
- * VTU service — data bundles & airtime sales on Flutterwave.
+ * VTU service — ClubKonnect data delivery with optional Flutterwave
+ * bank-transfer collection and legacy airtime fulfilment.
  *
  * Two modes (auto-detected, keys NEVER live in the repo):
- *   • merchant — the deployer's OWN Flutterwave secret key (set with
- *     `.setkey flutterwave FLWSECK-...` or FLW_SECRET_KEY env). Their
- *     account, their float, their margin.
+ *   • merchant — ClubKonnect is preferred for data when configured;
+ *     Flutterwave remains the bank-transfer collection lane and fallback.
  *   • gateway — a central Venom Gateway server holds its own keys
  *     (VTU_GATEWAY_URL + VTU_GATEWAY_KEY). Deployers just point at it.
  *
@@ -14,20 +14,29 @@
  *     notifications can never double-credit.
  *   • Payments only count when Flutterwave's own verify endpoint says
  *     successful AND the amount matches. Never a user's word or screenshot.
- *   • Failed deliveries after payment auto-refund to the wallet.
+ *   • Definitive failed deliveries after payment auto-refund to the wallet.
+ *   • Ambiguous provider timeouts are requeried, never blindly resubmitted.
  *   • Pending payments persist to disk — a restart never loses money.
  */
 import axios from 'axios';
 import { env } from '../config';
 import { logger } from '../utils/logger';
 import { settingsRepo } from '../database/repositories/settings.repo';
-import { walletRepo } from '../database/repositories/wallet.repo';
+import { PendingPayment, walletRepo } from '../database/repositories/wallet.repo';
 import { flushMongo } from '../database/mongo';
 import {
   FLUTTERWAVE_CHECKOUT_OPTIONS,
   isFlutterwaveTestSecretKey,
   isValidFlutterwaveSecretKey,
 } from '../utils/flutterwave';
+import {
+  ClubTransaction,
+  clubkonnectBalance,
+  clubkonnectConfigured,
+  listClubkonnectBundles,
+  queryClubkonnectTransaction,
+  submitClubkonnectData,
+} from './clubkonnect.service';
 
 // Re-exported so the VTU commands have a single service facade.
 export { walletRepo };
@@ -40,17 +49,20 @@ export type VtuMode = 'off' | 'merchant' | 'gateway';
 export type Network = 'MTN' | 'Glo' | 'Airtel' | '9mobile';
 
 export interface Bundle {
-  /** Flutterwave bill-item id (stable across cache refreshes). */
+  /** Legacy numeric identifier kept for older pending Flutterwave purchases. */
   id: number;
+  provider: 'flutterwave' | 'clubkonnect';
+  /** Stable provider-specific identifier; unlike Number(), preserves 1000 vs 1000.00. */
+  providerCode: string;
   network: Network;
-  /** Current Bills API route identifiers returned by Flutterwave. */
-  billerCode: string;
-  itemCode: string;
+  /** Flutterwave-only Bills API route identifiers. */
+  billerCode?: string;
+  itemCode?: string;
   /** Human-readable bundle name shown to customers. */
   flwName: string;
-  /** Flutterwave's price (naira) — what the merchant wallet is charged. */
+  /** Fulfilment provider cost (naira, before the owner's markup). */
   amountNaira: number;
-  /** Our selling price (kobo): FLW price + owner margin, rounded to ₦5. */
+  /** Selling price (kobo): provider cost + owner margin, rounded to ₦5. */
   priceKobo: number;
 }
 
@@ -61,8 +73,14 @@ export function flwSecretKey(): string {
 }
 
 export function vtuMode(): VtuMode {
-  if (flwSecretKey()) return 'merchant';
+  if (clubkonnectConfigured() || flwSecretKey()) return 'merchant';
   if (env.vtu.gatewayUrl.trim()) return 'gateway';
+  return 'off';
+}
+
+export function fulfilmentProvider(): 'clubkonnect' | 'flutterwave' | 'off' {
+  if (clubkonnectConfigured()) return 'clubkonnect';
+  if (flwSecretKey()) return 'flutterwave';
   return 'off';
 }
 
@@ -78,7 +96,7 @@ export function vtuUnavailable(): string | null {
   if (mode === 'gateway') {
     return '🚧 VTU *gateway mode* dey come (Phase B) — bot never support am yet.';
   }
-  return '💳 VTU is not activated yet.\n_Owner: activate am with `.setkey flutterwave FLWSECK-…`_';
+  return '💳 VTU is not activated yet.\n_Owner: configure collections with `.setkey flutterwave …` or data fulfilment with `.setkey clubkonnect USERID|APIKEY` in my private DM._';
 }
 
 /** Effective margin % on data bundles (runtime setting over env default). */
@@ -154,13 +172,22 @@ const BILLER_NETWORK: Record<string, Network> = {
   BIL111: '9mobile',
 };
 
-let bundleCache: { at: number; bundles: Bundle[] } | null = null;
+let flutterwaveBundleCache: { at: number; bundles: Bundle[] } | null = null;
 
-export async function listBundles(network?: Network): Promise<Bundle[]> {
-  if (!bundleCache || Date.now() - bundleCache.at > 60 * 60 * 1000) {
+function stableNumericId(value: string): number {
+  let hash = 2166136261;
+  for (const char of value) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+async function listFlutterwaveBundles(): Promise<Bundle[]> {
+  if (!flutterwaveBundleCache || Date.now() - flutterwaveBundleCache.at > 60 * 60 * 1000) {
     const res = await flw('get', '/bill-categories?country=NG');
     const items: any[] = res?.data ?? [];
-    bundleCache = {
+    flutterwaveBundleCache = {
       at: Date.now(),
       bundles: items
         .filter(
@@ -173,6 +200,8 @@ export async function listBundles(network?: Network): Promise<Bundle[]> {
         )
         .map((i) => ({
           id: Number(i.id),
+          provider: 'flutterwave' as const,
+          providerCode: `${i.biller_code}:${i.item_code}`,
           network: BILLER_NETWORK[i.biller_code],
           billerCode: String(i.biller_code),
           itemCode: String(i.item_code),
@@ -183,8 +212,37 @@ export async function listBundles(network?: Network): Promise<Bundle[]> {
         .sort((a, b) => a.amountNaira - b.amountNaira),
     };
   }
-  const all = bundleCache.bundles;
-  return network ? all.filter((b) => b.network === network) : all;
+  return flutterwaveBundleCache.bundles;
+}
+
+async function listBundlesForProvider(
+  provider: 'clubkonnect' | 'flutterwave',
+): Promise<Bundle[]> {
+  if (provider === 'clubkonnect') {
+    return (await listClubkonnectBundles()).map((bundle) => {
+      const providerCode = `${bundle.networkId}:${bundle.planId}`;
+      const amountNaira = bundle.costKobo / 100;
+      return {
+        id: stableNumericId(`clubkonnect:${providerCode}`),
+        provider: 'clubkonnect' as const,
+        providerCode,
+        network: bundle.network,
+        flwName: bundle.name,
+        amountNaira,
+        priceKobo: priceWithMargin(amountNaira),
+      };
+    });
+  }
+  return listFlutterwaveBundles();
+}
+
+async function listPrimaryBundles(): Promise<Bundle[]> {
+  return listBundlesForProvider(clubkonnectConfigured() ? 'clubkonnect' : 'flutterwave');
+}
+
+export async function listBundles(network?: Network): Promise<Bundle[]> {
+  const all = await listPrimaryBundles();
+  return network ? all.filter((bundle) => bundle.network === network) : all;
 }
 
 /** Resolve a bundle by network + display code (1-based index in price order). */
@@ -301,12 +359,15 @@ export async function initDirectBuy(
     kind: 'data',
     amountKobo: bundle.priceKobo,
     bundleId: bundle.id,
+    bundleCode: bundle.providerCode,
     bundleName: bundle.flwName,
+    provider: bundle.provider,
     network: bundle.network,
     phone,
     status: 'pending',
     createdAt: Date.now(),
   });
+  await flushMongo(); // persist the exact bundle/provider before exposing the link
   startPolling(tx);
   return { txRef: tx, link };
 }
@@ -338,6 +399,153 @@ async function payDataBundle(opts: {
   } catch (err) {
     rememberVtuError('data delivery', err);
     throw err;
+  }
+}
+
+type DataDeliveryOutcome =
+  | { state: 'delivered' }
+  | { state: 'pending'; detail: string }
+  | { state: 'failed'; detail: string };
+
+function clubStatusLabel(result: ClubTransaction): string {
+  return `${result.statusCode ?? ''}:${result.status}`.slice(0, 120);
+}
+
+async function rememberClubResult(
+  pending: PendingPayment,
+  result: ClubTransaction,
+): Promise<void> {
+  walletRepo.markPending(pending.txRef, {
+    providerOrderId: result.orderId ?? pending.providerOrderId,
+    providerCheckedAt: Date.now(),
+    providerStatus: clubStatusLabel(result),
+  });
+  await flushMongo();
+}
+
+async function attemptClubkonnectData(
+  pending: PendingPayment,
+  bundle: Bundle,
+): Promise<DataDeliveryOutcome> {
+  const [networkId, ...planParts] = bundle.providerCode.split(':');
+  const planId = planParts.join(':');
+  if (!networkId || !planId) {
+    return { state: 'failed', detail: 'invalid ClubKonnect bundle identifier' };
+  }
+
+  // A submitted order must be requeried before any retry. This prevents a
+  // timeout from causing the same data bundle to be delivered twice. Poll at
+  // most once per minute while ClubKonnect runs its own five-minute retries.
+  if (pending.providerSubmittedAt) {
+    if (
+      pending.providerCheckedAt &&
+      Date.now() - pending.providerCheckedAt < 60 * 1000
+    ) {
+      return { state: 'pending', detail: pending.providerStatus || 'awaiting provider reconciliation' };
+    }
+    try {
+      const queried = await queryClubkonnectTransaction({
+        requestId: pending.txRef,
+        orderId: pending.providerOrderId,
+      });
+      await rememberClubResult(pending, queried);
+      if (queried.state === 'delivered') {
+        clearVtuError();
+        return { state: 'delivered' };
+      }
+      if (queried.state === 'pending') {
+        if (Date.now() - pending.providerSubmittedAt >= 65 * 60 * 1000) {
+          rememberVtuError(
+            'ClubKonnect reconciliation',
+            new Error('provider retry window elapsed; order remains pending'),
+          );
+        }
+        return { state: 'pending', detail: queried.detail || queried.status };
+      }
+
+      // A failed-looking query can itself be an auth/input/not-found response.
+      // Refund only when the response is tied to an actual provider order or
+      // explicitly says it was cancelled/refunded. Otherwise leave the debit
+      // pending for owner reconciliation rather than risk free delivered data.
+      const terminalStatus =
+        queried.status.includes('CANCELLED') || queried.status.includes('REFUNDED');
+      if (!queried.orderId && !terminalStatus) {
+        const detail =
+          Date.now() - pending.providerSubmittedAt >= 65 * 60 * 1000
+            ? 'provider retry window elapsed; manual reconciliation required'
+            : queried.detail || 'awaiting provider reconciliation';
+        rememberVtuError('ClubKonnect data requery', new Error(detail));
+        return { state: 'pending', detail };
+      }
+      rememberVtuError('ClubKonnect data requery', new Error(queried.detail || queried.status));
+      return { state: 'failed', detail: queried.detail || queried.status };
+    } catch (err) {
+      rememberVtuError('ClubKonnect data requery', err);
+      walletRepo.markPending(pending.txRef, {
+        providerCheckedAt: Date.now(),
+        providerStatus: 'QUERY_ERROR',
+      });
+      await flushMongo();
+      return { state: 'pending', detail: safeDiagnosticError(err) };
+    }
+  }
+
+  walletRepo.markPending(pending.txRef, {
+    provider: 'clubkonnect',
+    providerSubmittedAt: Date.now(),
+    providerStatus: 'SUBMITTING',
+  });
+  await flushMongo();
+
+  try {
+    const submitted = await submitClubkonnectData({
+      networkId,
+      planId,
+      phone: pending.phone ?? pending.number,
+      requestId: pending.txRef,
+    });
+    await rememberClubResult(
+      { ...pending, providerSubmittedAt: Date.now() },
+      submitted,
+    );
+    if (submitted.state === 'delivered') {
+      clearVtuError();
+      return { state: 'delivered' };
+    }
+    if (submitted.state === 'pending') {
+      return { state: 'pending', detail: submitted.detail || submitted.status };
+    }
+    rememberVtuError('ClubKonnect data submission', new Error(submitted.detail || submitted.status));
+    return { state: 'failed', detail: submitted.detail || submitted.status };
+  } catch (err) {
+    // The provider may have received a request even if our HTTP connection
+    // timed out. Keep it pending and requery by the same request ID.
+    rememberVtuError('ClubKonnect data submission', err);
+    return { state: 'pending', detail: safeDiagnosticError(err) };
+  }
+}
+
+async function attemptDataDelivery(
+  pending: PendingPayment,
+  bundle: Bundle,
+): Promise<DataDeliveryOutcome> {
+  if (bundle.provider === 'clubkonnect') {
+    return attemptClubkonnectData(pending, bundle);
+  }
+  if (!bundle.billerCode || !bundle.itemCode) {
+    return { state: 'failed', detail: 'invalid Flutterwave bundle identifier' };
+  }
+  try {
+    await payDataBundle({
+      billerCode: bundle.billerCode,
+      itemCode: bundle.itemCode,
+      customer: pending.phone ?? pending.number,
+      amountNaira: bundle.amountNaira,
+      reference: pending.txRef,
+    });
+    return { state: 'delivered' };
+  } catch (err) {
+    return { state: 'failed', detail: safeDiagnosticError(err) };
   }
 }
 
@@ -384,7 +592,10 @@ export async function purchaseWithWallet(
   number: string,
   bundle: Bundle,
   phone: string,
-): Promise<{ ok: true; txRef: string } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; txRef: string; pending?: boolean }
+  | { ok: false; error: string }
+> {
   const tx = txRef('data', number);
   try {
     walletRepo.debit(number, bundle.priceKobo, 'purchase', tx, `${bundle.network} ${bundle.flwName}`);
@@ -400,32 +611,35 @@ export async function purchaseWithWallet(
     kind: 'data',
     amountKobo: bundle.priceKobo,
     bundleId: bundle.id,
+    bundleCode: bundle.providerCode,
     bundleName: bundle.flwName,
+    provider: bundle.provider,
     network: bundle.network,
     phone,
     status: 'paid', // the money already left the wallet
     createdAt: Date.now(),
   });
   await flushMongo(); // debit + record survive a crash from here on
-  try {
-    await payDataBundle({
-      billerCode: bundle.billerCode,
-      itemCode: bundle.itemCode,
-      customer: phone,
-      amountNaira: bundle.amountNaira,
-      reference: tx,
-    });
+  const pending = walletRepo.getPending(tx)!;
+  const outcome = await attemptDataDelivery(pending, bundle);
+  if (outcome.state === 'delivered') {
     walletRepo.markPending(tx, { status: 'delivered' });
     await flushMongo();
     return { ok: true, txRef: tx };
-  } catch (err) {
-    // Delivery failed — money goes straight back to the wallet.
-    walletRepo.credit(number, bundle.priceKobo, 'refund', `refund:${tx}`, 'delivery failed');
-    walletRepo.markPending(tx, { status: 'refunded' });
-    await flushMongo();
-    logger.warn({ err }, 'VTU delivery failed, wallet refunded');
-    return { ok: false, error: 'DELIVERY_FAILED' };
   }
+  if (outcome.state === 'pending') {
+    walletRepo.markPending(tx, { providerPendingNotifiedAt: Date.now() });
+    await flushMongo();
+    startPolling(tx);
+    return { ok: true, txRef: tx, pending: true };
+  }
+
+  // A definitive provider failure returns the full selling price immediately.
+  walletRepo.credit(number, bundle.priceKobo, 'refund', `refund:${tx}`, 'delivery failed');
+  walletRepo.markPending(tx, { status: 'refunded' });
+  await flushMongo();
+  logger.warn({ detail: outcome.detail }, 'VTU delivery failed, wallet refunded');
+  return { ok: false, error: 'DELIVERY_FAILED' };
 }
 
 /** Airtime: sold at face value (Flutterwave's ~2-3% commission covers fees). */
@@ -435,6 +649,7 @@ export async function buyAirtime(
   phone: string,
 ): Promise<{ ok: true; txRef: string } | { ok: false; error: string }> {
   if (amountNaira < 50 || amountNaira > 20000) return { ok: false, error: 'BAD_AMOUNT' };
+  if (!flwSecretKey()) return { ok: false, error: 'NO_FLW_KEY' };
   const tx = txRef('air', number);
   const kobo = Math.round(amountNaira * 100);
   try {
@@ -549,9 +764,33 @@ export async function checkAndProcess(txRef: string): Promise<boolean> {
     }
   }
 
-  // Direct buy-now (data): deliver the bundle the tx_ref was created for.
-  const bundles = await listBundles((p.network ?? 'MTN') as Network);
-  const bundle = bundles.find((b) => b.id === p.bundleId);
+  // Direct buy-now or wallet data order: resume against the provider that
+  // originally priced it, even if the owner changes providers later.
+  const provider = p.provider ?? 'flutterwave';
+  let bundle: Bundle | undefined;
+  // A plan may disappear (or the catalogue endpoint may be down) while an
+  // accepted order is processing. Requery the persisted exact order without
+  // depending on today's catalogue.
+  if (provider === 'clubkonnect' && p.providerSubmittedAt && p.bundleCode) {
+    bundle = {
+      id: p.bundleId ?? 0,
+      provider: 'clubkonnect',
+      providerCode: p.bundleCode,
+      network: (p.network ?? 'MTN') as Network,
+      flwName: p.bundleName ?? 'Data bundle',
+      amountNaira: 0,
+      priceKobo: p.amountKobo,
+    };
+  } else {
+    const bundles = await listBundlesForProvider(provider);
+    bundle = bundles.find(
+      (candidate) =>
+        candidate.network === (p.network ?? 'MTN') &&
+        (p.bundleCode
+          ? candidate.providerCode === p.bundleCode
+          : candidate.id === p.bundleId),
+    );
+  }
   if (!bundle) {
     walletRepo.credit(p.number, p.amountKobo, 'refund', `refund:${txRef}`, 'bundle unavailable');
     walletRepo.markPending(txRef, { status: 'refunded' });
@@ -559,18 +798,10 @@ export async function checkAndProcess(txRef: string): Promise<boolean> {
     await notify(p.number, `⚠️ That bundle no dey available again — ${naira(p.amountKobo)} don enter your *wallet* instead. Use .data to pick another.`);
     return true;
   }
-  try {
-    // Crash-resume guard: if the bill already went through right before a
-    // restart, don't pay for it twice — just finish the record + receipt.
-    if (!(await billExists(txRef))) {
-      await payDataBundle({
-        billerCode: bundle.billerCode,
-        itemCode: bundle.itemCode,
-        customer: p.phone ?? p.number,
-        amountNaira: bundle.amountNaira,
-        reference: txRef,
-      });
-    }
+
+  // Legacy Flutterwave orders may already have succeeded immediately before a
+  // crash. Query first so they are never submitted twice.
+  if (provider === 'flutterwave' && (await billExists(txRef))) {
     walletRepo.markPending(txRef, { status: 'delivered' });
     await flushMongo();
     await notify(
@@ -578,18 +809,40 @@ export async function checkAndProcess(txRef: string): Promise<boolean> {
       `🎉 *Payment confirmed — data delivered!*\n\n📶 ${bundle.network} • ${bundle.flwName}\n📞 ${p.phone}\n🧾 Ref: ${txRef}`,
     );
     return true;
-  } catch (err) {
-    // Money collected but delivery failed → wallet credit, never vanish.
-    walletRepo.credit(p.number, p.amountKobo, 'refund', `refund:${txRef}`, 'delivery failed');
-    walletRepo.markPending(txRef, { status: 'refunded' });
+  }
+
+  const outcome = await attemptDataDelivery(p, bundle);
+  if (outcome.state === 'pending') {
+    if (!p.providerPendingNotifiedAt) {
+      walletRepo.markPending(txRef, { providerPendingNotifiedAt: Date.now() });
+      await flushMongo();
+      await notify(
+        p.number,
+        `⏳ *Payment confirmed — data is processing*\n\n📶 ${bundle.network} • ${bundle.flwName}\n📞 ${p.phone}\n🧾 Ref: ${txRef}\n\n_I will message you after the provider confirms delivery._`,
+      );
+    }
+    return false;
+  }
+  if (outcome.state === 'delivered') {
+    walletRepo.markPending(txRef, { status: 'delivered' });
     await flushMongo();
-    logger.warn({ err }, 'direct-buy delivery failed, credited wallet');
     await notify(
       p.number,
-      `⚠️ Payment confirmed but the network delay deliver the bundle.\n\n✅ Your ${naira(p.amountKobo)} don enter your *wallet* — try again with .data (this time e go deliver from wallet instantly).`,
+      `🎉 *Payment confirmed — data delivered!*\n\n📶 ${bundle.network} • ${bundle.flwName}\n📞 ${p.phone}\n🧾 Ref: ${txRef}`,
     );
     return true;
   }
+
+  // Definitive provider failure: credit the complete selling price once.
+  walletRepo.credit(p.number, p.amountKobo, 'refund', `refund:${txRef}`, 'delivery failed');
+  walletRepo.markPending(txRef, { status: 'refunded' });
+  await flushMongo();
+  logger.warn({ detail: outcome.detail }, 'data delivery failed, credited wallet');
+  await notify(
+    p.number,
+    `⚠️ Data no deliver.\n\n✅ Your ${naira(p.amountKobo)} don return to your *wallet*. Pick another bundle with .data.`,
+  );
+  return true;
 }
 
 const polling = new Set<string>();
@@ -598,19 +851,34 @@ function startPolling(txRef: string): void {
   if (polling.has(txRef)) return;
   polling.add(txRef);
   let attempts = 0;
+  let checking = false;
   const timer = setInterval(async () => {
+    if (checking) return;
+    checking = true;
     attempts++;
     try {
       const done = await checkAndProcess(txRef);
-      if (done || attempts >= POLL_ATTEMPTS) {
+      const current = walletRepo.getPending(txRef);
+      const maxAttempts =
+        current?.provider === 'clubkonnect' && current.providerSubmittedAt
+          ? Math.ceil((70 * 60 * 1000) / POLL_INTERVAL_MS)
+          : POLL_ATTEMPTS;
+      if (done || attempts >= maxAttempts) {
         clearInterval(timer);
         polling.delete(txRef);
       }
     } catch {
-      if (attempts >= POLL_ATTEMPTS) {
+      const current = walletRepo.getPending(txRef);
+      const maxAttempts =
+        current?.provider === 'clubkonnect' && current.providerSubmittedAt
+          ? Math.ceil((70 * 60 * 1000) / POLL_INTERVAL_MS)
+          : POLL_ATTEMPTS;
+      if (attempts >= maxAttempts) {
         clearInterval(timer);
         polling.delete(txRef);
       }
+    } finally {
+      checking = false;
     }
   }, POLL_INTERVAL_MS);
   timer.unref?.();
@@ -641,6 +909,8 @@ const VTU_LAST_ERROR_KEY = 'vtu.last-provider-error';
 function safeDiagnosticError(err: unknown): string {
   return (err instanceof Error ? err.message : String(err))
     .replace(/FLWSECK[^\s"']*/gi, '[secret]')
+    .replace(/([?&](?:APIKey|UserID)=)[^&\s"']*/gi, '$1[redacted]')
+    .replace(/\b(?:APIKey|UserID)\s*[:=]\s*[^,\s}"']+/gi, '[credential redacted]')
     .slice(0, 220);
 }
 
@@ -670,20 +940,11 @@ function lastVtuError(): { at: number; stage: string; detail: string } | null {
  */
 export async function vtuDiagnostics(): Promise<string[]> {
   const key = flwSecretKey();
-  if (!key) {
-    return ['❌ No Flutterwave secret key is configured.'];
-  }
-  if (!isValidFlutterwaveSecretKey(key)) {
-    return [
-      '❌ The saved Flutterwave key is malformed. It must have no spaces or punctuation after the final *-X*.',
-      'Remove it with *.setkey remove flutterwave*, rotate it in Flutterwave, then save the replacement privately.',
-    ];
-  }
-
+  const provider = fulfilmentProvider();
   const lines = [
-    `🔑 Key format: *${isFlutterwaveTestSecretKey(key) ? 'TEST' : 'LIVE'}*`,
-    `💳 Requested checkout methods: *${FLUTTERWAVE_CHECKOUT_OPTIONS}*`,
+    `📦 Data provider: *${provider === 'clubkonnect' ? 'ClubKonnect' : provider === 'flutterwave' ? 'Flutterwave' : 'OFF'}*`,
   ];
+
   const previousFailure = lastVtuError();
   if (previousFailure) {
     lines.push(
@@ -691,29 +952,53 @@ export async function vtuDiagnostics(): Promise<string[]> {
     );
   }
 
-  try {
-    const res = await flw('get', '/balances');
-    const balances: any[] = (res as any)?.data ?? [];
-    const ngn = balances.find((entry) => entry.currency === 'NGN');
+  if (clubkonnectConfigured()) {
+    try {
+      const balance = await clubkonnectBalance();
+      lines.push(
+        `✅ ClubKonnect authentication works — provider balance: *₦${balance.toLocaleString('en-NG')}*`,
+      );
+    } catch (err) {
+      lines.push(`❌ ClubKonnect API check failed: ${safeDiagnosticError(err)}`);
+    }
+  } else {
+    lines.push('⚪ ClubKonnect data credentials are not configured.');
+  }
+
+  if (!key) {
+    lines.push('⚪ Flutterwave collection key is not configured — wallet-only purchases can still work.');
+  } else if (!isValidFlutterwaveSecretKey(key)) {
     lines.push(
-      `✅ Flutterwave API authentication works${
-        ngn ? ` — NGN available balance: *₦${Number(ngn.available_balance).toLocaleString('en-NG')}*` : ''
-      }`,
+      '❌ The saved Flutterwave key is malformed. Rotate it, remove it with *.setkey remove flutterwave*, then save the replacement privately.',
     );
-  } catch (err) {
-    lines.push(`❌ Flutterwave API check failed: ${safeDiagnosticError(err)}`);
-    return lines;
+  } else {
+    lines.push(
+      `🔑 Flutterwave key: *${isFlutterwaveTestSecretKey(key) ? 'TEST' : 'LIVE'}*`,
+      `💳 Checkout method: *${FLUTTERWAVE_CHECKOUT_OPTIONS}*`,
+    );
+    try {
+      const res = await flw('get', '/balances');
+      const balances: any[] = (res as any)?.data ?? [];
+      const ngn = balances.find((entry) => entry.currency === 'NGN');
+      lines.push(
+        `✅ Flutterwave collection API works${
+          ngn ? ` — NGN available balance: *₦${Number(ngn.available_balance).toLocaleString('en-NG')}*` : ''
+        }`,
+      );
+    } catch (err) {
+      lines.push(`❌ Flutterwave API check failed: ${safeDiagnosticError(err)}`);
+    }
   }
 
   try {
-    lines.push(`✅ Bundle catalogue loaded: *${(await listBundles()).length}* items`);
+    lines.push(`✅ Active bundle catalogue loaded: *${(await listBundles()).length}* items`);
   } catch (err) {
     lines.push(`❌ Bundle catalogue failed: ${safeDiagnosticError(err)}`);
   }
 
   lines.push(
-    'ℹ️ Flutterwave must have completed KYC and *Bank Transfer* enabled under Dashboard → Settings → Business Preferences → Payment Methods.',
-    'ℹ️ Airtime/data fulfilment additionally needs a funded source balance and the bot host IP allowed by Flutterwave.',
+    'ℹ️ Keep enough money in the active fulfilment provider wallet; Venom wallet balances are separate.',
+    'ℹ️ Checkout remains bank-transfer only. ClubKonnect data orders are requeried before any retry to prevent duplicate delivery.',
   );
   return lines;
 }

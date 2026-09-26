@@ -1,6 +1,6 @@
 import type { Command } from '../../types/command.type';
 import { reply, react } from '../../services/message.service';
-import { vtuUnavailable, initFund, naira } from '../../services/vtu.service';
+import { flwSecretKey, vtuUnavailable, initFund, naira } from '../../services/vtu.service';
 
 /**
  * Fund your Venom wallet via Flutterwave checkout.
@@ -11,11 +11,15 @@ const fund: Command = {
   name: 'fund',
   aliases: ['topup', 'fundwallet'],
   category: 'tools',
-  description: 'Top up your Venom wallet (Flutterwave: card/transfer/USSD).',
+  description: 'Top up your Venom wallet by Flutterwave bank transfer.',
   usage: 'fund <amount>',
   async run({ sock, msg, args }) {
     if (vtuUnavailable()) {
       await reply(sock, msg, vtuUnavailable()!);
+      return;
+    }
+    if (!flwSecretKey()) {
+      await reply(sock, msg, '🏦 Bank-transfer wallet top-ups are not configured yet.');
       return;
     }
 

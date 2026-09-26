@@ -65,6 +65,9 @@ const airtime: Command = {
     } else if (r.error === 'BAD_AMOUNT') {
       await react(sock, msg, '❌');
       await reply(sock, msg, 'ℹ️ Amount must be between ₦50 and ₦20,000.');
+    } else if (r.error === 'NO_FLW_KEY') {
+      await react(sock, msg, '⚠️');
+      await reply(sock, msg, '⚠️ Airtime is not enabled yet. Data purchases are available with *.data*.');
     } else {
       await react(sock, msg, '❌');
       await reply(sock, msg, `⚠️ Network no gree deliver the airtime — your money don return to your *wallet*. Try again shortly.`);

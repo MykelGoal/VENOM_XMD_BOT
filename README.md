@@ -95,33 +95,40 @@ With `MONGO_URI` configured, the same startup hydration also preserves group set
 
 ---
 
-## 💳 VTU — sell data & airtime (optional, owner-activated)
+## 💳 VTU — ClubKonnect data + bank-transfer collection
 
-Turn the bot into a mini VTU shop with **your own** [Flutterwave](https://flutterwave.com) account (free). One command to activate:
+Venom uses **ClubKonnect** for the live Nigerian data catalogue and low-cost data delivery. Configure it only in the bot owner's private DM (never in a group or source file):
+
+```
+.setkey clubkonnect USERID|APIKEY
+```
+
+Flutterwave remains the optional customer-collection lane and is restricted to **bank transfer only**:
 
 ```
 .setkey flutterwave FLWSECK-xxxxxxxxxxxxxxxx
 ```
 
-The key is stored in the bot's private database — it never touches the repo. (Prefer env? `FLW_SECRET_KEY` works too.)
+Both credentials are stored in the bot's private settings database and never belong in the repository. Runtime environment fallback remains available through `FLW_SECRET_KEY`, `CLUBKONNECT_USER_ID`, and `CLUBKONNECT_API_KEY`.
 
 | Users | Owner |
 |:------|:------|
-| `.data [mtn\|glo\|airtel\|9mobile]` — browse bundles + prices | `.vtu` — status: mode, Flutterwave balance, wallets, sales |
-| `.buydata <net> <code> [phone]` — instant from wallet, or a payment link | `.vtu check` — diagnose key/API/bundle access without charging anyone |
-| `.airtime <100-20000> [phone]` — airtime at face value | `.vtu margin <5>` — set your data markup % (default 3) |
-| `.fund <amount>` — create a wallet checkout link | `.setkey remove flutterwave` — deactivate |
+| `.data [mtn\|glo\|airtel\|9mobile]` — browse current ClubKonnect plans | `.vtu` — provider balances, wallets and sales |
+| `.buydata <net> <code> [phone]` — buy from wallet or request a bank-transfer link | `.vtu check` — read-only API/catalogue diagnostics |
+| `.airtime <100-20000> [phone]` — airtime when Flutterwave is configured | `.vtu margin <5>` — set data markup % (default 3) |
+| `.fund <amount>` — Flutterwave bank-transfer wallet top-up | `.setkey remove clubkonnect` / `.setkey remove flutterwave` |
 
-**How the money works** 🇳🇬
+**How the money and delivery safety work** 🇳🇬
 
-- Bank-transfer payment links via Flutterwave; the bot verifies every payment with Flutterwave itself before delivering — never a screenshot.
-- `.fund <amount>` tops up a user's wallet; wallet balance buys are instant.
-- Data sells at Flutterwave price **+ your margin** (default 3%, rounded up to ₦5); airtime sells at face value.
-- Every kobo is tracked in an append-only ledger — wallets survive restarts, failed deliveries auto-refund, and duplicate payment notifications can never double-credit.
+- Flutterwave creates bank-transfer-only checkout links and Venom verifies each payment directly; screenshots are never accepted as payment proof.
+- Data prices follow the current ClubKonnect catalogue plus the owner's margin (default 3%, rounded up to ₦5). Exact provider plan IDs are preserved.
+- Every debit/credit is recorded in an append-only ledger. Pending orders and provider references persist across restarts.
+- Venom requeries ClubKonnect with the original unique request reference before any retry. Ambiguous timeouts, processing, on-hold and network-unresponsive orders remain pending through the provider retry window; Venom refunds only after a definitive cancellation/refund/failure.
+- There is no automatic provider failover after an ambiguous submission, preventing duplicate delivery.
 
-*Merchant setup:* Complete Flutterwave KYC and enable **Bank Transfer** under Dashboard → Settings → Business Preferences → Payment Methods. Flutterwave charges airtime/data bills to your source balance, so keep it funded. Its current bill-payment requirements also require the bot server's outbound IP to be allowed on your Flutterwave account. Run `.vtu check` for safe read-only diagnostics; it also reports the last provider rejection after an automatic refund.
+*Setup:* Fund the ClubKonnect wallet before selling data. For customer top-ups, complete Flutterwave KYC and enable **Bank Transfer** under Dashboard → Settings → Business Preferences → Payment Methods. Run `.vtu check` for read-only, credential-sanitized diagnostics. Always rotate any API key accidentally posted in chat before deployment.
 
-**⚠️ Durable storage on Render free tier:** redeploys wipe local files. Set a **free** [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) connection string as `MONGO_URI`; operational settings and records are mirrored and restored on every boot. VTU can fall back to local files, but tournament creation requires MongoDB so registrations cannot disappear.
+**⚠️ Durable storage on Render free tier:** redeploys wipe local files. Set a **free** [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) connection string as `MONGO_URI`; operational settings, wallet ledgers and pending provider orders are mirrored and restored on every boot. VTU can fall back to local files, but production money flows should use MongoDB.
 
 ---
 

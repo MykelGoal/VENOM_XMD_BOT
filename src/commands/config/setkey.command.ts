@@ -22,6 +22,12 @@ import {
   isFlutterwaveTestSecretKey,
   isValidFlutterwaveSecretKey,
 } from '../../utils/flutterwave';
+import {
+  clubkonnectCredentialSource,
+  clubkonnectCredentialStatus,
+  removeClubkonnectCredentials,
+  setClubkonnectCredentials,
+} from '../../services/clubkonnect.service';
 
 /**
  * Owner command to set AI provider API keys at runtime — no host dashboard,
@@ -54,7 +60,7 @@ const HELP = [
   '• `.setkey list` — show providers (masked)',
   '• `.setkey remove <provider>` — remove a stored key',
   '',
-  '*Providers:* deepseek · gemini · openrouter · groq · openai · flutterwave (VTU)',
+  '*Providers:* deepseek · gemini · openrouter · groq · openai · flutterwave (collections) · clubkonnect (data)',
   '',
   '_Example:_ `.setkey gemini AIzaSyD...`',
   '_Takes effect immediately. Runtime keys override env vars._',
@@ -68,7 +74,8 @@ const setkey: Command = {
   usage: 'setkey <provider> <key> | setkey list | setkey remove <provider>',
   ownerOnly: true,
   async run({ sock, msg, args }) {
-    const sub = (args[0] ?? '').toLowerCase();
+    const rawSub = (args[0] ?? '').toLowerCase();
+    const sub = rawSub === 'clubconnect' ? 'clubkonnect' : rawSub;
 
     if (!sub) {
       await reply(sock, msg, HELP);
@@ -91,12 +98,17 @@ const setkey: Command = {
         `🔁 Fallback order: ${env.ai.order.join(' → ')}`,
         `✅ Active: ${active.length ? active.join(' → ') : 'none yet'}`,
         '',
-        `💳 Flutterwave (VTU): ${
+        `💳 Flutterwave (collections): ${
           settingsRepo.get('vtu.flwsecret')
-            ? '🟢 key set (merchant mode)'
+            ? '🟢 key set'
             : env.vtu.flwSecret
               ? '🟢 from env'
               : '⚪ no key'
+        }`,
+        `📶 ClubKonnect (data): ${
+          clubkonnectCredentialStatus() === 'configured'
+            ? `🟢 credentials set (${clubkonnectCredentialSource()})`
+            : '⚪ no credentials'
         }`,
         '',
         '_Set one with_ `.setkey <provider> <key>`',
@@ -108,6 +120,23 @@ const setkey: Command = {
     // ── .setkey remove <provider> ────────────────────────────
     if (sub === 'remove' || sub === 'delete' || sub === 'del') {
       const provider = (args[1] ?? '').toLowerCase();
+
+      if (provider === 'clubkonnect' || provider === 'clubconnect') {
+        const had = removeClubkonnectCredentials();
+        const fallback = clubkonnectCredentialSource();
+        await reply(
+          sock,
+          msg,
+          had
+            ? fallback === 'environment'
+              ? '🗑️ Removed the runtime *ClubKonnect* credentials. Environment credentials are still active.'
+              : '🗑️ Removed the *ClubKonnect* credentials. Data fulfilment falls back to Flutterwave if configured.'
+            : fallback === 'environment'
+              ? 'ℹ️ ClubKonnect is configured through environment variables; there is no runtime copy to remove.'
+              : 'ℹ️ No ClubKonnect credentials were stored.',
+        );
+        return;
+      }
 
       // VTU (Flutterwave) — stored under its own settings key.
       if (provider === 'flutterwave') {
@@ -186,9 +215,56 @@ const setkey: Command = {
     // ── .setkey <provider> <key> ─────────────────────────────
     const provider = sub;
 
-    // VTU (Flutterwave) merchant mode — the deployer's own payment account.
-    // Stored under 'vtu.flwsecret'; NEVER hardcoded in the repo.
+    if ((provider === 'clubkonnect' || provider === 'flutterwave') && msg.isGroup) {
+      try {
+        await sock.sendMessage(msg.chat, { delete: msg.raw.key });
+      } catch {
+        /* best-effort removal of the credential-bearing message */
+      }
+      await reply(sock, msg, '🔒 Send payment-provider credentials only in my private DM, never in a group.');
+      return;
+    }
+
+    // Dedicated VTU fulfilment. Keep both values in one private DM command:
+    // .setkey clubkonnect CK123|APIKEY
+    if (provider === 'clubkonnect') {
+      try {
+        await sock.sendMessage(msg.chat, { delete: msg.raw.key });
+      } catch {
+        /* non-fatal */
+      }
+      const joined = args.slice(1).join('').trim();
+      const [userId = '', apiKey = '', ...extra] = joined.split('|').map((part) => part.trim());
+      if (
+        extra.length ||
+        !/^CK\d+$/i.test(userId) ||
+        !/^[A-Za-z0-9]{20,}$/.test(apiKey)
+      ) {
+        await reply(
+          sock,
+          msg,
+          'ℹ️ Usage in my private DM: *setkey clubkonnect USERID|APIKEY*\n\nExample: _.setkey clubkonnect CK123456|YOURKEY_\nDo not add spaces, a full stop, or other text.',
+        );
+        return;
+      }
+      setClubkonnectCredentials(userId.toUpperCase(), apiKey);
+
+      await reply(
+        sock,
+        msg,
+        '✅ *ClubKonnect* saved as the primary data provider.\n\nRun *.vtu check*, then *.data mtn*.\n_Never post the API key in a group or public chat._',
+      );
+      return;
+    }
+
+    // VTU (Flutterwave) collection/legacy merchant mode — the deployer's own
+    // payment account. Stored under 'vtu.flwsecret'; never hardcoded.
     if (provider === 'flutterwave') {
+      try {
+        await sock.sendMessage(msg.chat, { delete: msg.raw.key });
+      } catch {
+        /* non-fatal */
+      }
       const key = (args[1] ?? '').trim();
       if (!key || args.length > 2) {
         await reply(sock, msg, 'ℹ️ Usage: *setkey flutterwave FLWSECK-xxxxxxxx-X*');
@@ -203,13 +279,6 @@ const setkey: Command = {
         return;
       }
       settingsRepo.set('vtu.flwsecret', key);
-
-      // Best-effort: delete the owner's message so the raw key doesn't linger.
-      try {
-        await sock.sendMessage(msg.chat, { delete: msg.raw.key });
-      } catch {
-        /* non-fatal */
-      }
 
       const keyMode = isFlutterwaveTestSecretKey(key) ? 'TEST' : 'LIVE';
       await reply(

@@ -43,7 +43,14 @@ export interface PendingPayment extends Record<string, unknown> {
   amountKobo: number;
   /** For data/airtime: what to deliver once payment lands. */
   bundleId?: number;
+  bundleCode?: string;
   bundleName?: string;
+  provider?: 'flutterwave' | 'clubkonnect';
+  providerOrderId?: string;
+  providerSubmittedAt?: number;
+  providerCheckedAt?: number;
+  providerPendingNotifiedAt?: number;
+  providerStatus?: string;
   network?: string;
   phone?: string;
   status: 'pending' | 'paid' | 'delivered' | 'failed' | 'refunded';

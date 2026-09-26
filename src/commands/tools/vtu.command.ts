@@ -5,6 +5,7 @@ import {
   vtuMode,
   flwBalance,
   flwSecretKey,
+  fulfilmentProvider,
   vtuDiagnostics,
   marginPct,
   setMarginPct,
@@ -16,6 +17,7 @@ import { maskKey } from '../../services/ai.service';
 import { env } from '../../config';
 import { isMongoEnabled } from '../../database/mongo';
 import { isFlutterwaveTestSecretKey } from '../../utils/flutterwave';
+import { clubkonnectBalance } from '../../services/clubkonnect.service';
 
 /**
  * VTU owner panel — status, pricing margin, sales stats.
@@ -57,20 +59,33 @@ const vtuCmd: Command = {
     const stats = walletRepo.stats();
     let modeLine: string;
     if (mode === 'merchant') {
-      const bal = await flwBalance();
+      const provider = fulfilmentProvider();
+      let providerBalance = 'unavailable';
+      if (provider === 'clubkonnect') {
+        try {
+          providerBalance = `₦${(await clubkonnectBalance()).toLocaleString('en-NG')}`;
+        } catch {
+          // The full sanitized reason is available through .vtu check.
+        }
+      } else {
+        providerBalance = await flwBalance();
+      }
+      const collectionKey = flwSecretKey();
       modeLine =
-        `🟢 *Merchant mode* — Flutterwave balance: *${bal}*\n` +
-        `🔑 Key: ${
-          isFlutterwaveTestSecretKey(flwSecretKey())
-            ? 'TEST key'
-            : `${maskKey(flwSecretKey())} (LIVE)`
+        `🟢 *Merchant mode* — data: *${provider === 'clubkonnect' ? 'ClubKonnect' : 'Flutterwave'}* (${providerBalance})\n` +
+        `🏦 Bank-transfer collection: ${
+          collectionKey
+            ? isFlutterwaveTestSecretKey(collectionKey)
+              ? 'Flutterwave TEST key'
+              : `${maskKey(collectionKey)} (LIVE)`
+            : 'not configured — wallet purchases only'
         }`;
     } else if (mode === 'gateway') {
       modeLine = `🔵 *Gateway mode* — ${env.vtu.gatewayUrl}\n🚧 _Phase B client never land yet — e go work once venom-gateway ships._`;
     } else {
       modeLine =
-        '⚪ *OFF* — no Flutterwave key and no gateway.\n' +
-        'Activate merchant mode with `.setkey flutterwave FLWSECK-…`';
+        '⚪ *OFF* — no fulfilment provider and no gateway.\n' +
+        'Configure ClubKonnect privately with `.setkey clubkonnect USERID|APIKEY`';
     }
 
     let bundleCount: string;
@@ -93,7 +108,7 @@ const vtuCmd: Command = {
             : '⚠️ local files — set MONGO_URI or wallets wipe on redeploy'
         }\n` +
         `🏦 Total user balances: ${naira(stats.totalBalanceKobo)}\n\n` +
-        (isSudo(msg.senderNumber) ? '_Money tips: airtime sells at face value (Flutterwave commission covers fees); data carries your markup._' : ''),
+        (isSudo(msg.senderNumber) ? '_Money tip: keep the active provider wallet funded; data sales carry your configured markup._' : ''),
     );
   },
 };

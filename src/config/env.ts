@@ -149,9 +149,9 @@ export const env = {
   },
 
   // VTU (data & airtime) sales. Two modes:
-  //   merchant — the deployer's OWN Flutterwave account (secret key set
-  //              via `.setkey flutterwave` or FLW_SECRET_KEY env). Their
-  //              money, their margin, their business.
+  //   merchant — ClubKonnect data fulfilment plus optional Flutterwave
+  //              bank-transfer collection. Credentials can be saved privately
+  //              with `.setkey` or supplied through environment variables.
   //   gateway  — a central Venom Gateway server (Phase B) that holds its
   //              own Flutterwave keys; deployers just point at it.
   //              (VTU_GATEWAY_URL + VTU_GATEWAY_KEY).
@@ -159,6 +159,8 @@ export const env = {
   vtu: {
     flwSecret: optional('FLW_SECRET_KEY', ''),
     flwBaseUrl: optional('FLW_BASE_URL', 'https://api.flutterwave.com/v3'),
+    clubkonnectUserId: optional('CLUBKONNECT_USER_ID', ''),
+    clubkonnectApiKey: optional('CLUBKONNECT_API_KEY', ''),
     gatewayUrl: optional('VTU_GATEWAY_URL', ''),
     gatewayKey: optional('VTU_GATEWAY_KEY', ''),
     // Default markup on data bundles (owner can change live with .vtu margin).

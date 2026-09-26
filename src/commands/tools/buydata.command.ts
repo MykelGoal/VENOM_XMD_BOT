@@ -2,6 +2,7 @@ import type { Command } from '../../types/command.type';
 import { reply, react } from '../../services/message.service';
 import {
   vtuUnavailable,
+  flwSecretKey,
   bundleByCode,
   purchaseWithWallet,
   initDirectBuy,
@@ -68,7 +69,14 @@ const buydata: Command = {
     // Fast lane: wallet balance covers it.
     if (balance >= price) {
       const r = await purchaseWithWallet(msg.senderNumber, bundle, phone);
-      if (r.ok) {
+      if (r.ok && r.pending) {
+        await react(sock, msg, '⏳');
+        await reply(
+          sock,
+          msg,
+          `⏳ *Order received — delivery is processing*\n\n📶 ${bundle.network} • ${bundle.flwName}\n📞 ${phone}\n🧾 ${r.txRef}\n\n_I will message you when the provider confirms delivery. Your money stays protected while it is pending._`,
+        );
+      } else if (r.ok) {
         await react(sock, msg, '✅');
         await reply(
           sock,
@@ -81,7 +89,7 @@ const buydata: Command = {
         await reply(
           sock,
           msg,
-          `⚠️ Network no gree deliver that one — your ${naira(price)} don return to your *wallet* sharp sharp. Try again or another bundle.\n\n_Owner: run *.vtu check* to see Flutterwave's last rejection._`,
+          `⚠️ Network no gree deliver that one — your ${naira(price)} don return to your *wallet* sharp sharp. Try again or another bundle.\n\n_Owner: run *.vtu check* to see the provider's last rejection._`,
         );
       } else {
         await react(sock, msg, '❌');
@@ -91,6 +99,15 @@ const buydata: Command = {
     }
 
     // Buy-now lane: payment link for the exact price.
+    if (!flwSecretKey()) {
+      await react(sock, msg, '💼');
+      await reply(
+        sock,
+        msg,
+        `💼 Wallet balance: *${naira(balance)}* — you need *${naira(price)}*.\n\n🏦 Bank-transfer top-ups are not configured yet.`,
+      );
+      return;
+    }
     try {
       const { link } = await initDirectBuy(msg.senderNumber, bundle, phone);
       await react(sock, msg, '🛒');
