@@ -1,11 +1,15 @@
 # Nixpacks build config (Railway, Koyeb, and other Nixpacks-based hosts).
-# Guarantees Node 20 + ffmpeg are available at build/runtime.
+# Guarantees Node 24 + ffmpeg are available at build/runtime.
+
+[variables]
+YOUTUBE_DL_FILENAME = "yt-dlp_linux"
+YOUTUBE_DL_SKIP_PYTHON_CHECK = "1"
 
 [phases.setup]
-nixPkgs = ["nodejs_20", "ffmpeg"]
+nixPkgs = ["nodejs_24", "ffmpeg"]
 
 [phases.build]
-cmds = ["npm install", "npm run build"]
+cmds = ["npm ci", "npm run build"]
 
 [start]
 cmd = "npm start"

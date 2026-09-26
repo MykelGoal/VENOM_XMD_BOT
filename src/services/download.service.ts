@@ -6,19 +6,20 @@
  * dead host only needs fixing in one place.
  *
  * Verified working at build time (2026-09):
- *   - yt-search (npm)                         → YouTube search + metadata
- *   - apis.davidcyriltech.my.id/download/*    → ytmp3, ytmp4, apk
- *   - apis.davidcyriltech.my.id/facebook      → facebook video
- *   - apis.davidcyriltech.my.id/spotifydl     → spotify track download
- *   - apis.davidcyriltech.my.id/lyrics?t=&a=  → lyrics (title AND artist, separate params)
- *   - tikwm.com/api                           → tiktok (no watermark)
+ *   - yt-search + local yt-dlp                 → YouTube search/metadata
+ *   - official standalone yt-dlp + ffmpeg      → YouTube audio/video
+ *   - apis.davidcyriltech.my.id/download/*     → optional keyed fast path + apk
+ *   - apis.davidcyriltech.my.id/facebook       → facebook video
+ *   - apis.davidcyriltech.my.id/spotifydl      → spotify track download
+ *   - apis.davidcyriltech.my.id/lyrics?t=&a=   → lyrics (title AND artist)
+ *   - tikwm.com/api                            → tiktok (no watermark)
  *
  * Known unreliable: lyrist.vercel.app now sits behind a Vercel security
  * checkpoint from most server IPs, so it is only used as a last resort.
  */
 import axios from 'axios';
 import yts from 'yt-search';
-import ytdlp from 'youtube-dl-exec';
+import ytdlp, { type Flags as YtDlpFlags } from 'youtube-dl-exec';
 import ffmpegPath from '@ffmpeg-installer/ffmpeg';
 import fs from 'fs';
 import os from 'os';
@@ -28,6 +29,29 @@ import crypto from 'crypto';
 const DC = 'https://apis.davidcyriltech.my.id';
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36';
+
+/**
+ * Modern yt-dlp needs a real JavaScript runtime for YouTube's player
+ * challenges. Node 22+ is already part of this bot, so point yt-dlp at the
+ * exact executable running the process instead of depending on Deno.
+ */
+export function ytDlpRuntimeFlags(
+  nodeVersion = process.versions.node,
+  nodePath = process.execPath,
+): YtDlpFlags {
+  const major = Number(nodeVersion.split('.')[0]);
+  const flags: YtDlpFlags = {
+    noCheckCertificates: true,
+    noWarnings: true,
+    socketTimeout: 30,
+    retries: 2,
+    forceIpv4: true,
+  };
+  if (major >= 22) flags.jsRuntimes = `node:${nodePath}`;
+  const proxy = process.env.YOUTUBE_PROXY?.trim();
+  if (proxy) flags.proxy = proxy;
+  return flags;
+}
 
 async function getJson<T = any>(
   url: string,
@@ -54,35 +78,90 @@ export interface YtVideo {
   ago: string;
 }
 
+function durationText(seconds: unknown): string {
+  const total = Number(seconds);
+  if (!Number.isFinite(total) || total < 0) return 'unknown';
+  const minutes = Math.floor(total / 60);
+  const remainder = Math.floor(total % 60);
+  return `${minutes}:${remainder.toString().padStart(2, '0')}`;
+}
+
+function ytDlpVideo(entry: any): YtVideo {
+  return {
+    title: entry.title || 'YouTube audio',
+    url:
+      entry.webpage_url ||
+      entry.url ||
+      `https://www.youtube.com/watch?v=${entry.id}`,
+    videoId: entry.id || extractYtId(entry.webpage_url || entry.url || ''),
+    duration: entry.duration_string || durationText(entry.duration),
+    views: Number(entry.view_count || entry.views || 0),
+    author: entry.channel || entry.uploader || entry.artist || 'Unknown',
+    thumbnail: entry.thumbnail || entry.thumbnails?.at?.(-1)?.url || '',
+    ago: '',
+  };
+}
+
+/** Search with yt-dlp when yt-search's YouTube page parser is unavailable. */
+async function ytDlpSearch(query: string, limit: number): Promise<YtVideo[]> {
+  const result: any = await ytdlp(`ytsearch${limit}:${query}`, {
+    ...ytDlpRuntimeFlags(),
+    dumpSingleJson: true,
+    skipDownload: true,
+    flatPlaylist: true,
+  });
+  const entries = Array.isArray(result?.entries)
+    ? result.entries
+    : result
+      ? [result]
+      : [];
+  return entries.slice(0, limit).map(ytDlpVideo);
+}
+
 export async function ytSearch(query: string, limit = 8): Promise<YtVideo[]> {
-  const r = await yts(query);
-  return (r.videos || []).slice(0, limit).map((v: any) => ({
-    title: v.title,
-    url: v.url,
-    videoId: v.videoId,
-    duration: v.timestamp || 'live',
-    views: v.views || 0,
-    author: v.author?.name || 'Unknown',
-    thumbnail: v.thumbnail || v.image,
-    ago: v.ago || '',
-  }));
+  try {
+    const r = await yts(query);
+    const videos = (r.videos || []).slice(0, limit).map((v: any) => ({
+      title: v.title,
+      url: v.url,
+      videoId: v.videoId,
+      duration: v.timestamp || 'live',
+      views: v.views || 0,
+      author: v.author?.name || 'Unknown',
+      thumbnail: v.thumbnail || v.image,
+      ago: v.ago || '',
+    }));
+    if (videos.length) return videos;
+  } catch {
+    /* yt-search occasionally breaks when YouTube changes its page markup */
+  }
+  return ytDlpSearch(query, limit);
 }
 
 /** Resolve a query to a single video URL (first search hit) or pass through a URL. */
 export async function resolveYt(input: string): Promise<YtVideo> {
   if (/youtu\.?be/i.test(input)) {
     const id = extractYtId(input);
-    const r = await yts({ videoId: id });
-    return {
-      title: r.title,
-      url: r.url,
-      videoId: r.videoId,
-      duration: r.timestamp || 'live',
-      views: r.views || 0,
-      author: r.author?.name || 'Unknown',
-      thumbnail: r.thumbnail || r.image,
-      ago: r.ago || '',
-    };
+    try {
+      const r = await yts({ videoId: id });
+      return {
+        title: r.title,
+        url: r.url,
+        videoId: r.videoId,
+        duration: r.timestamp || 'live',
+        views: r.views || 0,
+        author: r.author?.name || 'Unknown',
+        thumbnail: r.thumbnail || r.image,
+        ago: r.ago || '',
+      };
+    } catch {
+      const result: any = await ytdlp(input, {
+        ...ytDlpRuntimeFlags(),
+        dumpSingleJson: true,
+        skipDownload: true,
+      });
+      return ytDlpVideo(result);
+    }
   }
   const list = await ytSearch(input, 1);
   if (!list.length) throw new Error('No results');
@@ -127,8 +206,9 @@ async function cleanupYtDlp(prefix: string): Promise<void> {
 
 /**
  * Run yt-dlp locally as the reliable fallback when a free download API is
- * unavailable. The npm package fetches the current yt-dlp executable during
- * npm install; @ffmpeg-installer supplies a known ffmpeg path for conversion.
+ * unavailable. Production downloads yt-dlp's official standalone Linux build
+ * during npm install, so Render does not depend on Python being installed;
+ * @ffmpeg-installer supplies the conversion binary.
  */
 async function ytDlpDownload(
   videoUrl: string,
@@ -143,17 +223,16 @@ async function ytDlpDownload(
   try {
     if (kind === 'audio') {
       await ytdlp(videoUrl, {
+        ...ytDlpRuntimeFlags(),
         output,
+        format: 'bestaudio/best',
         extractAudio: true,
         audioFormat: 'mp3',
         audioQuality: 5,
         ffmpegLocation: ffmpegPath.path,
         noPlaylist: true,
-        noWarnings: true,
-        noCheckCertificates: true,
+        noProgress: true,
         maxFilesize: '50M',
-        socketTimeout: 30,
-        retries: 2,
       });
 
       const file = `${prefix}.mp3`;
@@ -168,6 +247,7 @@ async function ytDlpDownload(
     }
 
     await ytdlp(videoUrl, {
+      ...ytDlpRuntimeFlags(),
       output,
       // YouTube no longer exposes progressive formats for many videos. Merge
       // an MP4 video stream (up to 720p) with M4A audio using bundled ffmpeg.
@@ -176,11 +256,8 @@ async function ytDlpDownload(
       mergeOutputFormat: 'mp4',
       ffmpegLocation: ffmpegPath.path,
       noPlaylist: true,
-      noWarnings: true,
-      noCheckCertificates: true,
+      noProgress: true,
       maxFilesize: '50M',
-      socketTimeout: 30,
-      retries: 2,
     });
 
     const candidates = (await fs.promises.readdir(path.dirname(prefix)))

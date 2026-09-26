@@ -3,7 +3,7 @@ services:
     name: venom-xmd
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci && npm run build
     startCommand: npm start
     healthCheckPath: /
     autoDeploy: true
@@ -16,5 +16,12 @@ services:
         value: VENOM-XMD
       - key: PREFIX
         value: "."
+      # yt-dlp's YouTube challenge solver requires Node 22+.
       - key: NODE_VERSION
-        value: "20.18.0"
+        value: "24.20.0"
+      # Download the official self-contained Linux build instead of the
+      # Python-dependent zipapp used by youtube-dl-exec by default.
+      - key: YOUTUBE_DL_FILENAME
+        value: "yt-dlp_linux"
+      - key: YOUTUBE_DL_SKIP_PYTHON_CHECK
+        value: "1"
