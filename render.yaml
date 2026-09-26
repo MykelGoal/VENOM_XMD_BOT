@@ -16,12 +16,5 @@ services:
         value: VENOM-XMD
       - key: PREFIX
         value: "."
-      # yt-dlp's YouTube challenge solver requires Node 22+.
       - key: NODE_VERSION
         value: "24.20.0"
-      # Download the official self-contained Linux build instead of the
-      # Python-dependent zipapp used by youtube-dl-exec by default.
-      - key: YOUTUBE_DL_FILENAME
-        value: "yt-dlp_linux"
-      - key: YOUTUBE_DL_SKIP_PYTHON_CHECK
-        value: "1"

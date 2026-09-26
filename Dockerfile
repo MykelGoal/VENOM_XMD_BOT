@@ -1,23 +1,19 @@
 # ── Build stage ─────────────────────────────────────────────
-FROM node:24-alpine AS build
+FROM node:24-bookworm-slim AS build
 WORKDIR /app
-# youtube-dl-exec normally downloads a Python zipapp. Use yt-dlp's official
-# standalone musl build so Alpine needs neither Python nor Deno.
-ENV YOUTUBE_DL_FILENAME=yt-dlp_musllinux \
-    YOUTUBE_DL_SKIP_PYTHON_CHECK=1
 COPY package*.json ./
+COPY scripts/install-ytdlp.cjs ./scripts/install-ytdlp.cjs
 RUN npm ci
 COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
 
 # ── Runtime stage ───────────────────────────────────────────
-FROM node:24-alpine
+FROM node:24-bookworm-slim
 WORKDIR /app
-ENV NODE_ENV=production \
-    YOUTUBE_DL_FILENAME=yt-dlp_musllinux \
-    YOUTUBE_DL_SKIP_PYTHON_CHECK=1
+ENV NODE_ENV=production
 COPY package*.json ./
+COPY scripts/install-ytdlp.cjs ./scripts/install-ytdlp.cjs
 RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 

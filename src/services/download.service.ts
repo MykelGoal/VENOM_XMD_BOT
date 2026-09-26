@@ -19,38 +19,102 @@
  */
 import axios from 'axios';
 import yts from 'yt-search';
-import ytdlp, { type Flags as YtDlpFlags } from 'youtube-dl-exec';
 import ffmpegPath from '@ffmpeg-installer/ffmpeg';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 
 const DC = 'https://apis.davidcyriltech.my.id';
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36';
 
-/**
- * Modern yt-dlp needs a real JavaScript runtime for YouTube's player
- * challenges. Node 22+ is already part of this bot, so point yt-dlp at the
- * exact executable running the process instead of depending on Deno.
- */
-export function ytDlpRuntimeFlags(
+const execFileAsync = promisify(execFile);
+const MANAGED_YT_DLP = path.join(
+  process.cwd(),
+  'node_modules',
+  '.venom-tools',
+  process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp',
+);
+
+function installedDenoPath(): string | undefined {
+  try {
+    const root = path.dirname(require.resolve('deno/package.json'));
+    const executable = path.join(
+      root,
+      process.platform === 'win32' ? 'deno.exe' : 'deno',
+    );
+    return fs.existsSync(executable) ? executable : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Build challenge-runtime arguments without relying on Render settings. */
+export function ytDlpRuntimeArgs(
   nodeVersion = process.versions.node,
   nodePath = process.execPath,
-): YtDlpFlags {
+  denoPath = installedDenoPath(),
+): string[] {
+  if (denoPath) return ['--js-runtimes', `deno:${denoPath}`];
   const major = Number(nodeVersion.split('.')[0]);
-  const flags: YtDlpFlags = {
-    noCheckCertificates: true,
-    noWarnings: true,
-    socketTimeout: 30,
-    retries: 2,
-    forceIpv4: true,
-  };
-  if (major >= 22) flags.jsRuntimes = `node:${nodePath}`;
+  return major >= 22 ? ['--js-runtimes', `node:${nodePath}`] : [];
+}
+
+function ytDlpBinaryPath(): string {
+  return process.env.YT_DLP_PATH?.trim() || MANAGED_YT_DLP;
+}
+
+/** Execute the verified standalone binary installed by the project postinstall. */
+async function runYtDlp(target: string, args: string[]): Promise<string> {
+  const binary = ytDlpBinaryPath();
+  if (!fs.existsSync(binary)) {
+    throw new Error(
+      `Managed yt-dlp executable is missing at ${binary}. Run npm install without --ignore-scripts.`,
+    );
+  }
+  const common = [
+    '--no-check-certificates',
+    '--no-warnings',
+    '--socket-timeout',
+    '30',
+    '--retries',
+    '2',
+    '--force-ipv4',
+    ...ytDlpRuntimeArgs(),
+  ];
   const proxy = process.env.YOUTUBE_PROXY?.trim();
-  if (proxy) flags.proxy = proxy;
-  return flags;
+  if (proxy) common.push('--proxy', proxy);
+
+  try {
+    const { stdout } = await execFileAsync(
+      binary,
+      [...common, ...args, '--', target],
+      {
+        timeout: 5 * 60_000,
+        maxBuffer: 16 * 1024 * 1024,
+        windowsHide: true,
+      },
+    );
+    return stdout;
+  } catch (err) {
+    const failure = err as Error & { stderr?: string; stdout?: string };
+    const detail = (failure.stderr || failure.stdout || failure.message)
+      .trim()
+      .slice(-4000);
+    throw new Error(`yt-dlp failed: ${detail || 'unknown downloader error'}`);
+  }
+}
+
+async function runYtDlpJson(target: string, args: string[]): Promise<any> {
+  const output = await runYtDlp(target, args);
+  try {
+    return JSON.parse(output);
+  } catch {
+    throw new Error('yt-dlp returned invalid metadata');
+  }
 }
 
 async function getJson<T = any>(
@@ -104,12 +168,11 @@ function ytDlpVideo(entry: any): YtVideo {
 
 /** Search with yt-dlp when yt-search's YouTube page parser is unavailable. */
 async function ytDlpSearch(query: string, limit: number): Promise<YtVideo[]> {
-  const result: any = await ytdlp(`ytsearch${limit}:${query}`, {
-    ...ytDlpRuntimeFlags(),
-    dumpSingleJson: true,
-    skipDownload: true,
-    flatPlaylist: true,
-  });
+  const result: any = await runYtDlpJson(`ytsearch${limit}:${query}`, [
+    '--dump-single-json',
+    '--skip-download',
+    '--flat-playlist',
+  ]);
   const entries = Array.isArray(result?.entries)
     ? result.entries
     : result
@@ -155,11 +218,10 @@ export async function resolveYt(input: string): Promise<YtVideo> {
         ago: r.ago || '',
       };
     } catch {
-      const result: any = await ytdlp(input, {
-        ...ytDlpRuntimeFlags(),
-        dumpSingleJson: true,
-        skipDownload: true,
-      });
+      const result: any = await runYtDlpJson(input, [
+        '--dump-single-json',
+        '--skip-download',
+      ]);
       return ytDlpVideo(result);
     }
   }
@@ -206,9 +268,9 @@ async function cleanupYtDlp(prefix: string): Promise<void> {
 
 /**
  * Run yt-dlp locally as the reliable fallback when a free download API is
- * unavailable. Production downloads yt-dlp's official standalone Linux build
- * during npm install, so Render does not depend on Python being installed;
- * @ffmpeg-installer supplies the conversion binary.
+ * unavailable. The project postinstall verifies and installs yt-dlp's official
+ * standalone build, while the official Deno npm package handles YouTube's JS
+ * challenges; no Render dashboard variables or system Python are required.
  */
 async function ytDlpDownload(
   videoUrl: string,
@@ -222,18 +284,23 @@ async function ytDlpDownload(
 
   try {
     if (kind === 'audio') {
-      await ytdlp(videoUrl, {
-        ...ytDlpRuntimeFlags(),
+      await runYtDlp(videoUrl, [
+        '--output',
         output,
-        format: 'bestaudio/best',
-        extractAudio: true,
-        audioFormat: 'mp3',
-        audioQuality: 5,
-        ffmpegLocation: ffmpegPath.path,
-        noPlaylist: true,
-        noProgress: true,
-        maxFilesize: '50M',
-      });
+        '--format',
+        'bestaudio/best',
+        '--extract-audio',
+        '--audio-format',
+        'mp3',
+        '--audio-quality',
+        '5',
+        '--ffmpeg-location',
+        ffmpegPath.path,
+        '--no-playlist',
+        '--no-progress',
+        '--max-filesize',
+        '50M',
+      ]);
 
       const file = `${prefix}.mp3`;
       if (!fs.existsSync(file)) throw new Error('yt-dlp produced no MP3 file');
@@ -246,19 +313,22 @@ async function ytDlpDownload(
       };
     }
 
-    await ytdlp(videoUrl, {
-      ...ytDlpRuntimeFlags(),
+    // YouTube no longer exposes progressive formats for many videos. Merge
+    // an MP4 video stream (up to 720p) with M4A audio using bundled ffmpeg.
+    await runYtDlp(videoUrl, [
+      '--output',
       output,
-      // YouTube no longer exposes progressive formats for many videos. Merge
-      // an MP4 video stream (up to 720p) with M4A audio using bundled ffmpeg.
-      format:
-        'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best',
-      mergeOutputFormat: 'mp4',
-      ffmpegLocation: ffmpegPath.path,
-      noPlaylist: true,
-      noProgress: true,
-      maxFilesize: '50M',
-    });
+      '--format',
+      'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best',
+      '--merge-output-format',
+      'mp4',
+      '--ffmpeg-location',
+      ffmpegPath.path,
+      '--no-playlist',
+      '--no-progress',
+      '--max-filesize',
+      '50M',
+    ]);
 
     const candidates = (await fs.promises.readdir(path.dirname(prefix)))
       .filter((name) => name.startsWith(path.basename(prefix) + '.'))

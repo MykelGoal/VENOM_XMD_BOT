@@ -1,4 +1,6 @@
 import http from 'http';
+import fs from 'fs';
+import path from 'path';
 import { logger } from '../utils/logger';
 import { env } from '../config';
 import { META } from '../config';
@@ -25,6 +27,19 @@ export function startKeepAlive(): void {
         status: 'alive',
         bot: env.botName,
         version: META.version,
+        commit: process.env.RENDER_GIT_COMMIT?.slice(0, 7) || 'local',
+        node: process.versions.node,
+        downloaderReady: Boolean(
+          process.env.YT_DLP_PATH?.trim() ||
+            fs.existsSync(
+              path.join(
+                process.cwd(),
+                'node_modules',
+                '.venom-tools',
+                process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp',
+              ),
+            ),
+        ),
         uptime: Math.floor(process.uptime()),
       }),
     );

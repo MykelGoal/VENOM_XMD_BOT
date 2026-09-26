@@ -138,12 +138,11 @@ Works with all providers (DeepSeek, Gemini, Groq, OpenRouter, OpenAI) via functi
 
 ## 💻 Local
 
-Use **Node.js 24 LTS** (Node 22 minimum). Modern YouTube downloads require a supported JavaScript runtime. The Render, Docker and Nixpacks configs install the correct standalone `yt-dlp` build automatically without Python.
+Use **Node.js 24 LTS** (Node 20 minimum). `npm install` automatically downloads and verifies the correct standalone `yt-dlp` build plus Deno for YouTube challenges—no system Python or hosting-dashboard variables are required.
 
 ```bash
 git clone https://github.com/MykelGoal/VENOM_XMD_BOT && cd VENOM_XMD_BOT
-# Linux x64: install yt-dlp's self-contained build instead of its Python zipapp
-YOUTUBE_DL_FILENAME=yt-dlp_linux YOUTUBE_DL_SKIP_PYTHON_CHECK=1 npm install
+npm install
 cp .env.example .env   # fill SESSION_ID + OWNER_NUMBER
 npm run build && npm start
 ```
