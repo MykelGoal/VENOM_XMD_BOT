@@ -23,6 +23,11 @@ import { logger } from '../utils/logger';
 import { settingsRepo } from '../database/repositories/settings.repo';
 import { walletRepo } from '../database/repositories/wallet.repo';
 import { flushMongo } from '../database/mongo';
+import {
+  FLUTTERWAVE_CHECKOUT_OPTIONS,
+  isFlutterwaveTestSecretKey,
+  isValidFlutterwaveSecretKey,
+} from '../utils/flutterwave';
 
 // Re-exported so the VTU commands have a single service facade.
 export { walletRepo };
@@ -35,10 +40,13 @@ export type VtuMode = 'off' | 'merchant' | 'gateway';
 export type Network = 'MTN' | 'Glo' | 'Airtel' | '9mobile';
 
 export interface Bundle {
-  /** Flutterwave bill-category id (stable across cache refreshes). */
+  /** Flutterwave bill-item id (stable across cache refreshes). */
   id: number;
   network: Network;
-  /** Exact FLW bundle name — required as the `type` field on purchase. */
+  /** Current Bills API route identifiers returned by Flutterwave. */
+  billerCode: string;
+  itemCode: string;
+  /** Human-readable bundle name shown to customers. */
   flwName: string;
   /** Flutterwave's price (naira) — what the merchant wallet is charged. */
   amountNaira: number;
@@ -155,10 +163,19 @@ export async function listBundles(network?: Network): Promise<Bundle[]> {
     bundleCache = {
       at: Date.now(),
       bundles: items
-        .filter((i) => BILLER_NETWORK[i.biller_code] && !i.is_airtime && Number(i.amount) > 0)
+        .filter(
+          (i) =>
+            BILLER_NETWORK[i.biller_code] &&
+            !i.is_airtime &&
+            Number(i.amount) > 0 &&
+            typeof i.item_code === 'string' &&
+            i.item_code,
+        )
         .map((i) => ({
           id: Number(i.id),
           network: BILLER_NETWORK[i.biller_code],
+          billerCode: String(i.biller_code),
+          itemCode: String(i.item_code),
           flwName: String(i.name),
           amountNaira: Number(i.amount),
           priceKobo: priceWithMargin(Number(i.amount)),
@@ -225,8 +242,9 @@ async function createCheckoutLink(opts: {
     redirect_url: botPhoneDigits
       ? `https://wa.me/${botPhoneDigits}`
       : env.session.siteUrl,
-    // Bank transfer only — that's how Nigerians pay (owner's call).
-    payment_options: 'banktransfer',
+    // Owner preference: transfer-only checkout. Flutterwave also requires the
+    // method to be enabled on the merchant dashboard.
+    payment_options: FLUTTERWAVE_CHECKOUT_OPTIONS,
     customer: {
       // Email is REQUIRED by FLW — user<digits>@ keeps it valid (no leading +).
       email: `user${digits}@${emailHost}`,
@@ -295,23 +313,56 @@ export async function initDirectBuy(
 
 /* ────────────────────────── fulfilment ────────────────────────── */
 
-/** Deliver a data bundle / airtime through the Flutterwave Bills API. */
-async function payBill(opts: {
-  type: string; // bundle name, or 'AIRTIME'
+/** Deliver a data bundle through Flutterwave's current bill-item endpoint. */
+async function payDataBundle(opts: {
+  billerCode: string;
+  itemCode: string;
   customer: string; // +234… phone
   amountNaira: number; // FLW price (NOT the user's margin price)
   reference: string;
 }): Promise<void> {
-  const res = await flw('post', '/bills', {
-    country: 'NG',
-    customer: opts.customer,
-    amount: opts.amountNaira,
-    recurrence: 'ONCE',
-    type: opts.type,
-    reference: opts.reference,
-  });
-  const status = (res as any)?.status ?? (res as any)?.data?.status;
-  if (status !== 'success') throw new Error(`bill status: ${String(status)}`);
+  try {
+    const res = await flw(
+      'post',
+      `/billers/${encodeURIComponent(opts.billerCode)}/items/${encodeURIComponent(opts.itemCode)}/payment`,
+      {
+        country: 'NG',
+        customer_id: opts.customer,
+        amount: opts.amountNaira,
+        reference: opts.reference,
+      },
+    );
+    const status = (res as any)?.status ?? (res as any)?.data?.status;
+    if (status !== 'success') throw new Error(`bill status: ${String(status)}`);
+    clearVtuError();
+  } catch (err) {
+    rememberVtuError('data delivery', err);
+    throw err;
+  }
+}
+
+/** Airtime remains on Flutterwave's variable-amount AIRTIME bill route. */
+async function payAirtimeBill(opts: {
+  customer: string;
+  amountNaira: number;
+  reference: string;
+}): Promise<void> {
+  try {
+    const res = await flw('post', '/bills', {
+      country: 'NG',
+      customer: opts.customer,
+      amount: opts.amountNaira,
+      recurrence: 'ONCE',
+      type: 'AIRTIME',
+      reference: opts.reference,
+    });
+    const status = (res as any)?.status ?? (res as any)?.data?.status;
+    if (status !== 'success') throw new Error(`bill status: ${String(status)}`);
+    clearVtuError();
+  } catch (err) {
+    rememberVtuError('airtime delivery', err);
+    throw err;
+  }
 }
 
 /**
@@ -357,7 +408,13 @@ export async function purchaseWithWallet(
   });
   await flushMongo(); // debit + record survive a crash from here on
   try {
-    await payBill({ type: bundle.flwName, customer: phone, amountNaira: bundle.amountNaira, reference: tx });
+    await payDataBundle({
+      billerCode: bundle.billerCode,
+      itemCode: bundle.itemCode,
+      customer: phone,
+      amountNaira: bundle.amountNaira,
+      reference: tx,
+    });
     walletRepo.markPending(tx, { status: 'delivered' });
     await flushMongo();
     return { ok: true, txRef: tx };
@@ -397,7 +454,7 @@ export async function buyAirtime(
   });
   await flushMongo();
   try {
-    await payBill({ type: 'AIRTIME', customer: phone, amountNaira, reference: tx });
+    await payAirtimeBill({ customer: phone, amountNaira, reference: tx });
     walletRepo.markPending(tx, { status: 'delivered' });
     await flushMongo();
     return { ok: true, txRef: tx };
@@ -472,7 +529,11 @@ export async function checkAndProcess(txRef: string): Promise<boolean> {
     const amountNaira = (p.amountKobo ?? 0) / 100;
     try {
       if (!(await billExists(txRef))) {
-        await payBill({ type: 'AIRTIME', customer: p.phone ?? p.number, amountNaira, reference: txRef });
+        await payAirtimeBill({
+          customer: p.phone ?? p.number,
+          amountNaira,
+          reference: txRef,
+        });
       }
       walletRepo.markPending(txRef, { status: 'delivered' });
       await flushMongo();
@@ -502,8 +563,9 @@ export async function checkAndProcess(txRef: string): Promise<boolean> {
     // Crash-resume guard: if the bill already went through right before a
     // restart, don't pay for it twice — just finish the record + receipt.
     if (!(await billExists(txRef))) {
-      await payBill({
-        type: bundle.flwName,
+      await payDataBundle({
+        billerCode: bundle.billerCode,
+        itemCode: bundle.itemCode,
         customer: p.phone ?? p.number,
         amountNaira: bundle.amountNaira,
         reference: txRef,
@@ -573,6 +635,88 @@ export function resumePendingVtu(): void {
 }
 
 /* ────────────────────────── owner status ────────────────────────── */
+
+const VTU_LAST_ERROR_KEY = 'vtu.last-provider-error';
+
+function safeDiagnosticError(err: unknown): string {
+  return (err instanceof Error ? err.message : String(err))
+    .replace(/FLWSECK[^\s"']*/gi, '[secret]')
+    .slice(0, 220);
+}
+
+function rememberVtuError(stage: string, err: unknown): void {
+  settingsRepo.set(
+    VTU_LAST_ERROR_KEY,
+    JSON.stringify({ at: Date.now(), stage, detail: safeDiagnosticError(err) }),
+  );
+}
+
+function clearVtuError(): void {
+  settingsRepo.set(VTU_LAST_ERROR_KEY, '');
+}
+
+function lastVtuError(): { at: number; stage: string; detail: string } | null {
+  try {
+    const parsed = JSON.parse(settingsRepo.get(VTU_LAST_ERROR_KEY) || 'null');
+    return parsed && typeof parsed.detail === 'string' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read-only owner diagnostics. This never creates a charge or bill; it checks
+ * key shape, Flutterwave authentication/balance access and the bundle catalog.
+ */
+export async function vtuDiagnostics(): Promise<string[]> {
+  const key = flwSecretKey();
+  if (!key) {
+    return ['❌ No Flutterwave secret key is configured.'];
+  }
+  if (!isValidFlutterwaveSecretKey(key)) {
+    return [
+      '❌ The saved Flutterwave key is malformed. It must have no spaces or punctuation after the final *-X*.',
+      'Remove it with *.setkey remove flutterwave*, rotate it in Flutterwave, then save the replacement privately.',
+    ];
+  }
+
+  const lines = [
+    `🔑 Key format: *${isFlutterwaveTestSecretKey(key) ? 'TEST' : 'LIVE'}*`,
+    `💳 Requested checkout methods: *${FLUTTERWAVE_CHECKOUT_OPTIONS}*`,
+  ];
+  const previousFailure = lastVtuError();
+  if (previousFailure) {
+    lines.push(
+      `⚠️ Last provider failure (${previousFailure.stage}, ${new Date(previousFailure.at).toISOString()}): ${previousFailure.detail}`,
+    );
+  }
+
+  try {
+    const res = await flw('get', '/balances');
+    const balances: any[] = (res as any)?.data ?? [];
+    const ngn = balances.find((entry) => entry.currency === 'NGN');
+    lines.push(
+      `✅ Flutterwave API authentication works${
+        ngn ? ` — NGN available balance: *₦${Number(ngn.available_balance).toLocaleString('en-NG')}*` : ''
+      }`,
+    );
+  } catch (err) {
+    lines.push(`❌ Flutterwave API check failed: ${safeDiagnosticError(err)}`);
+    return lines;
+  }
+
+  try {
+    lines.push(`✅ Bundle catalogue loaded: *${(await listBundles()).length}* items`);
+  } catch (err) {
+    lines.push(`❌ Bundle catalogue failed: ${safeDiagnosticError(err)}`);
+  }
+
+  lines.push(
+    'ℹ️ Flutterwave must have completed KYC and *Bank Transfer* enabled under Dashboard → Settings → Business Preferences → Payment Methods.',
+    'ℹ️ Airtime/data fulfilment additionally needs a funded source balance and the bot host IP allowed by Flutterwave.',
+  );
+  return lines;
+}
 
 /** Merchant-mode Flutterwave wallet balance (for the .vtu owner panel). */
 export async function flwBalance(): Promise<string> {

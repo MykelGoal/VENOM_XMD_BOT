@@ -81,7 +81,7 @@ const buydata: Command = {
         await reply(
           sock,
           msg,
-          `⚠️ Network no gree deliver that one — your ${naira(price)} don return to your *wallet* sharp sharp. Try again or another bundle.`,
+          `⚠️ Network no gree deliver that one — your ${naira(price)} don return to your *wallet* sharp sharp. Try again or another bundle.\n\n_Owner: run *.vtu check* to see Flutterwave's last rejection._`,
         );
       } else {
         await react(sock, msg, '❌');
@@ -98,7 +98,7 @@ const buydata: Command = {
         sock,
         msg,
         `🛒 *${bundle.network} • ${bundle.flwName}*\n📞 ${phone}\n💸 *${naira(price)}*\n\n` +
-          `Pay here (card / transfer / USSD):\n${link}\n\n` +
+          `Pay here (bank transfer):\n${link}\n\n` +
           `_Once payment clear, the data deliver to ${phone} automatically._ 🔒`,
       );
     } catch (err) {

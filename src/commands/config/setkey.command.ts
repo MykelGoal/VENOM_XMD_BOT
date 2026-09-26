@@ -18,6 +18,10 @@ import {
 } from '../../services/host.service';
 import { env } from '../../config';
 import { settingsRepo } from '../../database/repositories/settings.repo';
+import {
+  isFlutterwaveTestSecretKey,
+  isValidFlutterwaveSecretKey,
+} from '../../utils/flutterwave';
 
 /**
  * Owner command to set AI provider API keys at runtime — no host dashboard,
@@ -185,16 +189,16 @@ const setkey: Command = {
     // VTU (Flutterwave) merchant mode — the deployer's own payment account.
     // Stored under 'vtu.flwsecret'; NEVER hardcoded in the repo.
     if (provider === 'flutterwave') {
-      const key = args[1] ?? '';
+      const key = (args[1] ?? '').trim();
       if (!key || args.length > 2) {
-        await reply(sock, msg, 'ℹ️ Usage: *setkey flutterwave FLWSECK-xxxxxxxx*');
+        await reply(sock, msg, 'ℹ️ Usage: *setkey flutterwave FLWSECK-xxxxxxxx-X*');
         return;
       }
-      if (!key.startsWith('FLWSECK')) {
+      if (!isValidFlutterwaveSecretKey(key)) {
         await reply(
           sock,
           msg,
-          '⚠️ That no look like a Flutterwave *secret* key — dem start with *FLWSECK-*. (The FLWPUBK- one na public key, e no fit power sales.)',
+          '⚠️ That Flutterwave secret key looks malformed. Paste only the key: it must begin with *FLWSECK-* (or *FLWSECK_TEST-*) and end with *-X*. Do not add a full stop or other text.',
         );
         return;
       }
@@ -207,12 +211,13 @@ const setkey: Command = {
         /* non-fatal */
       }
 
+      const keyMode = isFlutterwaveTestSecretKey(key) ? 'TEST' : 'LIVE';
       await reply(
         sock,
         msg,
-        '✅ *Flutterwave* key saved — VTU is LIVE in merchant mode!\n\n' +
-          'Try: *.data mtn* to see bundles, *.fund 500* to test your checkout.\n\n' +
-          '_Note: test keys (…-X) work for testing the flow only; set your LIVE key the same way when ready._',
+        `✅ *Flutterwave* ${keyMode} key saved — VTU merchant mode is active!\n\n` +
+          'Run *.vtu check* first, then use *.fund 500* to create a checkout link.\n\n' +
+          '_Never post this secret key in a group or public chat._',
       );
       return;
     }

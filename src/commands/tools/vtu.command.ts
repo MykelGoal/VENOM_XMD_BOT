@@ -5,6 +5,7 @@ import {
   vtuMode,
   flwBalance,
   flwSecretKey,
+  vtuDiagnostics,
   marginPct,
   setMarginPct,
   listBundles,
@@ -14,6 +15,7 @@ import {
 import { maskKey } from '../../services/ai.service';
 import { env } from '../../config';
 import { isMongoEnabled } from '../../database/mongo';
+import { isFlutterwaveTestSecretKey } from '../../utils/flutterwave';
 
 /**
  * VTU owner panel — status, pricing margin, sales stats.
@@ -24,11 +26,19 @@ const vtuCmd: Command = {
   name: 'vtu',
   category: 'tools',
   description: 'VTU control panel (owner): status, margin, stats.',
-  usage: 'vtu [margin <%>]',
+  usage: 'vtu [check | margin <%>]',
   ownerOnly: true,
   async run({ sock, msg, args }) {
+    const subcommand = args[0]?.toLowerCase();
+
+    if (subcommand === 'check' || subcommand === 'diagnose') {
+      const lines = await vtuDiagnostics();
+      await reply(sock, msg, ['🩺 *VTU diagnostics*', '', ...lines].join('\n'));
+      return;
+    }
+
     // margin subcommand
-    if (args[0]?.toLowerCase() === 'margin') {
+    if (subcommand === 'margin') {
       const pct = Number(args[1]);
       if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
         await reply(sock, msg, `ℹ️ Usage: *vtu margin <0-100>*\nCurrent: *${marginPct()}%*`);
@@ -50,7 +60,11 @@ const vtuCmd: Command = {
       const bal = await flwBalance();
       modeLine =
         `🟢 *Merchant mode* — Flutterwave balance: *${bal}*\n` +
-        `🔑 Key: ${flwSecretKey().endsWith('-X') ? 'TEST key' : maskKey(flwSecretKey())}`;
+        `🔑 Key: ${
+          isFlutterwaveTestSecretKey(flwSecretKey())
+            ? 'TEST key'
+            : `${maskKey(flwSecretKey())} (LIVE)`
+        }`;
     } else if (mode === 'gateway') {
       modeLine = `🔵 *Gateway mode* — ${env.vtu.gatewayUrl}\n🚧 _Phase B client never land yet — e go work once venom-gateway ships._`;
     } else {

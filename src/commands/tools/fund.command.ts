@@ -3,7 +3,7 @@ import { reply, react } from '../../services/message.service';
 import { vtuUnavailable, initFund, naira } from '../../services/vtu.service';
 
 /**
- * Fund your Venom wallet via Flutterwave (bank transfer).
+ * Fund your Venom wallet via Flutterwave checkout.
  *   .fund 2000 → payment link → wallet credits automatically on payment.
  * The bot watches the payment and messages you the moment it clears.
  */

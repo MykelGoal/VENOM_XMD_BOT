@@ -108,17 +108,18 @@ The key is stored in the bot's private database — it never touches the repo. (
 | Users | Owner |
 |:------|:------|
 | `.data [mtn\|glo\|airtel\|9mobile]` — browse bundles + prices | `.vtu` — status: mode, Flutterwave balance, wallets, sales |
-| `.buydata <net> <code> [phone]` — instant from wallet, or a payment link | `.vtu margin <5>` — set your data markup % (default 3) |
-| `.airtime <100-20000> [phone]` — airtime at face value | `.setkey remove flutterwave` — deactivate |
+| `.buydata <net> <code> [phone]` — instant from wallet, or a payment link | `.vtu check` — diagnose key/API/bundle access without charging anyone |
+| `.airtime <100-20000> [phone]` — airtime at face value | `.vtu margin <5>` — set your data markup % (default 3) |
+| `.fund <amount>` — create a wallet checkout link | `.setkey remove flutterwave` — deactivate |
 
 **How the money works** 🇳🇬
 
-- Payment links (card / bank transfer / USSD) via Flutterwave; the bot verifies every payment with Flutterwave itself before delivering — never a screenshot.
+- Bank-transfer payment links via Flutterwave; the bot verifies every payment with Flutterwave itself before delivering — never a screenshot.
 - `.fund <amount>` tops up a user's wallet; wallet balance buys are instant.
 - Data sells at Flutterwave price **+ your margin** (default 3%, rounded up to ₦5); airtime sells at face value.
 - Every kobo is tracked in an append-only ledger — wallets survive restarts, failed deliveries auto-refund, and duplicate payment notifications can never double-credit.
 
-*Note (merchant mode): Flutterwave charges bills to your Flutterwave balance, so keep it funded — check it anytime with `.vtu`.*
+*Merchant setup:* Complete Flutterwave KYC and enable **Bank Transfer** under Dashboard → Settings → Business Preferences → Payment Methods. Flutterwave charges airtime/data bills to your source balance, so keep it funded. Its current bill-payment requirements also require the bot server's outbound IP to be allowed on your Flutterwave account. Run `.vtu check` for safe read-only diagnostics; it also reports the last provider rejection after an automatic refund.
 
 **⚠️ Durable storage on Render free tier:** redeploys wipe local files. Set a **free** [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) connection string as `MONGO_URI`; operational settings and records are mirrored and restored on every boot. VTU can fall back to local files, but tournament creation requires MongoDB so registrations cannot disappear.
 
