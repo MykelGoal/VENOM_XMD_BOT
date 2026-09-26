@@ -117,6 +117,32 @@ async function runYtDlpJson(target: string, args: string[]): Promise<any> {
   }
 }
 
+/**
+ * Shared cloud-host IPs are sometimes challenged on yt-dlp's default YouTube
+ * client. Retry public videos through clients that can still expose a basic
+ * progressive stream without account cookies or a manually supplied PO token.
+ */
+async function runYtDlpDownload(
+  target: string,
+  args: string[],
+): Promise<string> {
+  try {
+    return await runYtDlp(target, args);
+  } catch (err) {
+    const message = String(err instanceof Error ? err.message : err);
+    const challenged =
+      /sign in to confirm|not a bot|page needs to be reloaded|no video formats/i.test(
+        message,
+      );
+    if (!challenged || !/youtu\.?be/i.test(target)) throw err;
+    return runYtDlp(target, [
+      '--extractor-args',
+      'youtube:player_client=android_vr,web_embedded',
+      ...args,
+    ]);
+  }
+}
+
 async function getJson<T = any>(
   url: string,
   timeout = 30000,
@@ -284,7 +310,7 @@ async function ytDlpDownload(
 
   try {
     if (kind === 'audio') {
-      await runYtDlp(videoUrl, [
+      await runYtDlpDownload(videoUrl, [
         '--output',
         output,
         '--format',
@@ -315,7 +341,7 @@ async function ytDlpDownload(
 
     // YouTube no longer exposes progressive formats for many videos. Merge
     // an MP4 video stream (up to 720p) with M4A audio using bundled ffmpeg.
-    await runYtDlp(videoUrl, [
+    await runYtDlpDownload(videoUrl, [
       '--output',
       output,
       '--format',

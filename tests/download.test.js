@@ -31,6 +31,10 @@ test('project install verifies a standalone yt-dlp without dashboard variables',
     path.join(root, 'scripts/install-ytdlp.cjs'),
     'utf8',
   );
+  const downloadService = fs.readFileSync(
+    path.join(root, 'src/services/download.service.ts'),
+    'utf8',
+  );
   const render = fs.readFileSync(path.join(root, 'render.yaml'), 'utf8');
   const docker = fs.readFileSync(path.join(root, 'Dockerfile'), 'utf8');
   const nixpacks = fs.readFileSync(path.join(root, 'nixpacks.toml'), 'utf8');
@@ -40,6 +44,10 @@ test('project install verifies a standalone yt-dlp without dashboard variables',
   assert.equal(pkg.dependencies['youtube-dl-exec'], undefined);
   assert.match(installer, /SHA2-256SUMS/);
   assert.match(installer, /node_modules', '\.venom-tools'/);
+  assert.match(
+    downloadService,
+    /youtube:player_client=android_vr,web_embedded/,
+  );
   assert.match(render, /buildCommand: npm ci && npm run build/);
   assert.match(docker, /node:24-bookworm-slim/);
   assert.match(docker, /COPY scripts\/install-ytdlp\.cjs/);
