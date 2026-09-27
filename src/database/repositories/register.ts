@@ -5,6 +5,7 @@ import './access.repo';
 import './afk.repo';
 import './economy.repo';
 import './group.repo';
+import './groupbrain.repo';
 import './groupstats.repo';
 import './note.repo';
 import './settings.repo';

@@ -140,7 +140,25 @@ Add any AI key (`.setkey gemini <key>` — free at [aistudio.google.com](https:/
 > **"how much dey my wallet?"** → it checks and tells you
 > **"buy MTN 1GB for 0803…"** → it quotes the exact price, you reply **yes**, it delivers (or sends a payment link if your wallet is short)
 
-Works with all providers (DeepSeek, Gemini, Groq, OpenRouter, OpenAI) via function calling. Money moves **only** on your explicit "yes" — matched by deterministic code, never by the model — and owner/admin/group commands are blocked from AI reach.
+Works with all providers (DeepSeek, Gemini, Groq, OpenRouter, OpenAI) via function calling. Quota/network failures put only that provider on a temporary circuit-breaker cooldown while the router uses another. Money moves **only** on your explicit "yes" — matched by deterministic code, never by the model — and owner/admin/group commands are blocked from AI reach.
+
+### 🧠 Group Brain — teach Venom how your community works
+
+Admins can enable a durable, selective community assistant without making it reply to every joke:
+
+```text
+.brain on
+.brain purpose Free Fire community for custom rooms, tournaments and member support
+.brain teach Our guild ID is 123456
+.brain rule add Respect every member
+.brain style Use short Nigerian English and Pidgin replies
+.brain roomadmins @admin1 @admin2
+.brain photo record
+```
+
+Admins can also teach naturally: **“Venom, remember that our guild ID is 123456”** or schedule **“Venom, schedule room match tonight by 9pm.”** Official facts, room events, onboarding state and reminder delivery survive restarts through MongoDB. Casual recent context is bounded to 60 short, pseudonymized observations and expires after 48 hours.
+
+Selective mode answers direct calls and relevant group questions while ignoring ordinary banter. It can understand directly addressed images through Gemini/OpenAI/OpenRouter vision; newcomer picture checks never identify people or infer sensitive traits. `.roommatch 9pm` sends private room-admin reminders 30 minutes before and one group reminder 10 minutes before.
 
 ---
 

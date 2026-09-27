@@ -22,6 +22,7 @@ const operationalCollections = [
   'afk',
   'economy',
   'groups',
+  'groupbrains',
   'groupstats',
   'notes',
   'settings',

@@ -58,19 +58,28 @@ export function isAIRunnable(cmd: Command): boolean {
   );
 }
 
-let allowlistSummary: string | null = null;
-
-/** Compact "what can I run" summary for the run_command tool description. */
-function runnableCommandSummary(): string {
-  if (allowlistSummary) return allowlistSummary;
-  const byCat = new Map<string, string[]>();
-  for (const cmd of commands.values()) {
-    if (!isAIRunnable(cmd)) continue;
-    (byCat.get(cmd.category) ?? byCat.set(cmd.category, []).get(cmd.category)!).push(cmd.name);
-  }
-  const lines = [...byCat.entries()].map(([cat, names]) => `${cat}: ${names.join(', ')}`);
-  allowlistSummary = lines.join('\n');
-  return allowlistSummary;
+function findRunnableCommands(query: string): Command[] {
+  const words = query
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((word) => word.length >= 2);
+  const unique = new Map<string, Command>();
+  for (const cmd of commands.values()) unique.set(cmd.name, cmd);
+  return [...unique.values()]
+    .filter(isAIRunnable)
+    .map((cmd) => {
+      const haystack = `${cmd.name} ${(cmd.aliases ?? []).join(' ')} ${cmd.description} ${cmd.category}`.toLowerCase();
+      const score = words.reduce(
+        (total, word) => total + (cmd.name === word ? 8 : haystack.includes(word) ? 1 : 0),
+        0,
+      );
+      return { cmd, score };
+    })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || a.cmd.name.localeCompare(b.cmd.name))
+    .slice(0, 8)
+    .map((item) => item.cmd);
 }
 
 /* ──────────────────── purchase confirm gate (money safety) ───────────── */
@@ -168,6 +177,21 @@ export function matchBundle(bundles: Bundle[], query: string): Bundle | null {
 /** Tools the AI gets for this message (VTU tools only in merchant mode). */
 export function buildAITools(): ToolDef[] {
   const tools: ToolDef[] = [
+    {
+      name: 'find_command',
+      description:
+        'Find safe bot commands that match a user goal. Call this when you do not already know the exact command name; then call run_command with the best result.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'what the user wants to do, e.g. "download TikTok video"',
+          },
+        },
+        required: ['query'],
+      },
+    },
     {
       name: 'run_command',
       description:
@@ -271,8 +295,7 @@ export function aiToolsSystemPrompt(): string {
   return [
     '## YOUR TOOLS',
     'You can ACT, not just talk. When the user asks you to do something (play a song, check the weather, check their wallet, buy data), call the matching tool instead of telling them which command to type. After a tool runs, tell the user briefly what happened — never stay silent about an action you took.',
-    'Commands you may run with run_command (name only, no dot):',
-    runnableCommandSummary(),
+    'Common safe command names include play, video, tiktok, weather, wiki, translate, lyrics, sticker and ssweb. If you do not know the exact command for a goal, call find_command first instead of guessing. Never announce a command list unless the user asks.',
     ...(vtuOn
       ? [
           '## MONEY RULES (strict)',
@@ -297,6 +320,17 @@ export function buildToolExecutor(
 ): ToolExecutor {
   return async (name, args): Promise<string> => {
     switch (name) {
+      case 'find_command': {
+        const query = String(args.query ?? '').trim();
+        if (!query) return 'ERROR: describe what command you need.';
+        const found = findRunnableCommands(query);
+        return found.length
+          ? found
+              .map((cmd) => `${cmd.name} — ${cmd.description}`)
+              .join('\n')
+          : 'No safe runnable command matched. Answer normally or ask one clarifying question.';
+      }
+
       /* ── generic command runner ── */
       case 'run_command': {
         const raw = String(args.command ?? '').toLowerCase().replace(/^\.+/, '');

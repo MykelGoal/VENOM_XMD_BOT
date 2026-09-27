@@ -42,6 +42,48 @@ const DEFAULT_SYSTEM = () => buildVenomBrain();
 const REQUEST_TIMEOUT_MS = 18_000;
 const MAX_TOKENS = 512;
 
+/** Provider circuit breakers stop a quota-limited API being retried on every message. */
+const providerCooldownUntil = new Map<string, number>();
+
+function providerReady(name: string, now = Date.now()): boolean {
+  return (providerCooldownUntil.get(name) ?? 0) <= now;
+}
+
+function providerFailureCooldown(err: unknown): number {
+  const status = axios.isAxiosError(err) ? err.response?.status ?? 0 : 0;
+  const text = axios.isAxiosError(err)
+    ? `${err.message} ${JSON.stringify(err.response?.data ?? '').slice(0, 300)}`
+    : String(err);
+  if (status === 429 || /quota|rate.?limit|too many requests/i.test(text)) {
+    return 10 * 60 * 1000;
+  }
+  if (status === 401 || status === 403 || /invalid.*key|unauthor/i.test(text)) {
+    return 10 * 60 * 1000;
+  }
+  if (status === 503 || /overload|high demand|unavailable/i.test(text)) {
+    return 90 * 1000;
+  }
+  return 30 * 1000;
+}
+
+function coolProvider(name: string, err: unknown): void {
+  providerCooldownUntil.set(name, Date.now() + providerFailureCooldown(err));
+}
+
+function clearProviderCooldown(name: string): void {
+  providerCooldownUntil.delete(name);
+}
+
+function safeAIErrorDetail(err: unknown): string {
+  const status = axios.isAxiosError(err) ? err.response?.status ?? '' : '';
+  const message = err instanceof Error ? err.message : String(err);
+  return `${status} ${message}`
+    .replace(/([?&](?:key|api_key)=)[^&\s"']+/gi, '$1[redacted]')
+    .replace(/\b(?:Bearer\s+|sk-|gsk_|AIza)[A-Za-z0-9._-]+/gi, '[secret]')
+    .trim()
+    .slice(0, 220);
+}
+
 /* ─── Runtime key layer (.setkey) ────────────────────────────────────────
  * Keys set via the .setkey owner command are persisted in the settings
  * store and ALWAYS win over env variables — so owners can add/replace
@@ -215,8 +257,17 @@ function activeProviders(): ProviderCfg[] {
     .filter((p): p is ProviderCfg => Boolean(p) && p.hasKey());
 }
 
+function availableProviders(): ProviderCfg[] {
+  return activeProviders().filter((provider) => providerReady(provider.name));
+}
+
 export function isAIConfigured(): boolean {
   return activeProviders().length > 0;
+}
+
+/** Remaining provider cooldown in seconds (0 means ready or not configured). */
+export function providerCooldownSeconds(provider: string): number {
+  return Math.max(0, Math.ceil(((providerCooldownUntil.get(provider) ?? 0) - Date.now()) / 1000));
 }
 
 /** List configured provider names (for status/diagnostics commands). */
@@ -225,8 +276,8 @@ export function configuredProviders(): string[] {
 }
 
 export async function getAIReply(opts: AIReplyOptions): Promise<string> {
-  const providers = activeProviders();
-  if (providers.length === 0) {
+  const configured = activeProviders();
+  if (configured.length === 0) {
     return (
       '🤖 AI is not configured yet.\n\n' +
       'Add ONE (or more) of these keys:\n' +
@@ -237,20 +288,26 @@ export async function getAIReply(opts: AIReplyOptions): Promise<string> {
     );
   }
 
+  const providers = availableProviders();
+  if (providers.length === 0) {
+    const wait = Math.min(
+      ...configured.map((provider) => providerCooldownSeconds(provider.name)).filter(Boolean),
+    );
+    return `⏳ AI providers are cooling down after quota/network errors. Try again in about ${Number.isFinite(wait) ? Math.max(1, Math.ceil(wait / 60)) : 1} minute(s).`;
+  }
+
   const errors: string[] = [];
   for (const provider of providers) {
     try {
       const answer = await provider.call(opts);
-      if (answer && answer.trim()) return toWhatsApp(answer.trim());
+      if (answer && answer.trim()) {
+        clearProviderCooldown(provider.name);
+        return toWhatsApp(answer.trim());
+      }
       errors.push(`${provider.name}: empty response`);
     } catch (err) {
-      const detail = axios.isAxiosError(err)
-        ? `${err.response?.status ?? ''} ${
-            typeof err.response?.data === 'object'
-              ? JSON.stringify(err.response?.data).slice(0, 200)
-              : err.message
-          }`
-        : String(err);
+      const detail = safeAIErrorDetail(err);
+      coolProvider(provider.name, err);
       logger.warn(`AI provider "${provider.name}" failed → ${detail}`);
       errors.push(`${provider.name}: ${detail}`);
       // fall through to the next provider
@@ -369,18 +426,22 @@ function toolChatCfg(provider: string): {
 export async function getAIReplyWithTools(
   opts: AIToolOptions,
 ): Promise<string> {
-  const providers = activeProviders();
-  if (providers.length === 0) return getAIReply(opts); // "not configured" msg
+  const providers = availableProviders();
+  if (providers.length === 0) return getAIReply(opts); // not configured / cooling down
 
   for (const p of providers) {
     const cfg = toolChatCfg(p.name);
     if (!cfg?.apiKey || !cfg.model) continue;
     try {
       const answer = await chatWithToolLoop(cfg, opts);
-      if (answer && answer.trim()) return toWhatsApp(answer.trim());
+      if (answer && answer.trim()) {
+        clearProviderCooldown(p.name);
+        return toWhatsApp(answer.trim());
+      }
     } catch (err) {
+      coolProvider(p.name, err);
       logger.warn(
-        `AI tools provider "${p.name}" failed → ${String((err as Error).message).slice(0, 200)}`,
+        `AI tools provider "${p.name}" failed → ${safeAIErrorDetail(err)}`,
       );
       // fall through to the next provider
     }
@@ -574,6 +635,7 @@ export async function transcribeAudio(
 ): Promise<string> {
   const apiKey = effectiveAIKey('groq');
   if (!apiKey) throw new Error('NO_KEY');
+  if (!providerReady('groq')) throw new Error('AI_COOLDOWN');
 
   const baseUrl = env.ai.groq.baseUrl.replace(/\/$/, '');
   const endpoint = opts.translate
@@ -589,14 +651,19 @@ export async function transcribeAudio(
     form.append('language', opts.language);
   }
 
-  const { data } = await axios.post(endpoint, form, {
-    headers: { ...form.getHeaders(), Authorization: `Bearer ${apiKey}` },
-    timeout: 60_000,
-    maxBodyLength: Infinity,
-    maxContentLength: Infinity,
-  });
-
-  return (data?.text ?? '').trim();
+  try {
+    const { data } = await axios.post(endpoint, form, {
+      headers: { ...form.getHeaders(), Authorization: `Bearer ${apiKey}` },
+      timeout: 60_000,
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity,
+    });
+    clearProviderCooldown('groq');
+    return (data?.text ?? '').trim();
+  } catch (err) {
+    coolProvider('groq', err);
+    throw err;
+  }
 }
 
 /** Vision-capable providers, in preference order, with their model + caller. */
@@ -657,18 +724,25 @@ export async function analyzeImage(
   prompt: string,
   mime = 'image/jpeg',
 ): Promise<string> {
-  const providers = VISION_PROVIDERS.filter((p) => p.hasKey());
-  if (providers.length === 0) throw new Error('NO_VISION');
+  const configured = VISION_PROVIDERS.filter((p) => p.hasKey());
+  if (configured.length === 0) throw new Error('NO_VISION');
+  const providers = configured.filter((provider) => providerReady(provider.name));
+  if (providers.length === 0) throw new Error('VISION_COOLDOWN');
 
   const b64 = image.toString('base64');
   let lastErr: unknown;
   for (const p of providers) {
     try {
       const out = await p.call(b64, mime, prompt);
-      if (out) return out;
+      if (out) {
+        clearProviderCooldown(p.name);
+        return out;
+      }
     } catch (err) {
-      lastErr = err;
-      logger.warn({ err, provider: p.name }, 'vision provider failed');
+      const detail = safeAIErrorDetail(err);
+      lastErr = new Error(detail);
+      coolProvider(p.name, err);
+      logger.warn({ detail, provider: p.name }, 'vision provider failed');
     }
   }
   throw lastErr ?? new Error('All vision providers failed.');

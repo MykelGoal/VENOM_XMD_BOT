@@ -1,6 +1,10 @@
 import type { Command } from '../../types/command.type';
 import { reply } from '../../services/message.service';
-import { configuredProviders, isAIConfigured } from '../../services/ai.service';
+import {
+  configuredProviders,
+  isAIConfigured,
+  providerCooldownSeconds,
+} from '../../services/ai.service';
 import { env } from '../../config';
 
 /** Shows which AI providers are configured and the fallback order. */
@@ -19,13 +23,17 @@ const aistatus: Command = {
       '🤖 *VENOM AI — Provider Status*',
       '',
       isAIConfigured()
-        ? `✅ Active (${active.length}): *${active.join(' → ')}*`
+        ? `✅ Configured (${active.length}): *${active.join(' → ')}*`
         : '❌ No providers configured yet.',
       '',
       '*All providers:*',
-      ...all.map(
-        (p) => `${active.includes(p) ? '🟢' : '⚪'} ${p}`,
-      ),
+      ...all.map((p) => {
+        const cooldown = providerCooldownSeconds(p);
+        if (active.includes(p) && cooldown > 0) {
+          return `🟡 ${p} — cooling down ~${Math.max(1, Math.ceil(cooldown / 60))}m`;
+        }
+        return `${active.includes(p) ? '🟢' : '⚪'} ${p}`;
+      }),
       '',
       `🔁 Fallback order: ${env.ai.order.join(', ')}`,
       '',

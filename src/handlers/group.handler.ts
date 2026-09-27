@@ -6,6 +6,7 @@ import type {
 import { store } from '../core/store';
 import { logger } from '../utils/logger';
 import { groupRepo } from '../database/repositories/group.repo';
+import { groupBrainRepo } from '../database/repositories/groupbrain.repo';
 import { getGroupMetadata } from '../services/group.service';
 
 interface GroupParticipantsUpdate {
@@ -69,8 +70,8 @@ export async function handleGroupParticipantsUpdate(
   store.clearGroup(id);
   logger.debug(`Group ${id}: ${action} → ${participants.join(', ')}`);
 
-  const settings = groupRepo.get(id);
-  if (!settings) return;
+  const settings = groupRepo.ensure(id);
+  const brain = groupBrainRepo.get(id);
 
   // ── Anti-promote / anti-demote ──────────────────────────────
   // Revert role changes NOT made by the bot itself. author is the actor.
@@ -101,8 +102,11 @@ export async function handleGroupParticipantsUpdate(
     return;
   }
 
-  // ── Welcome / goodbye ───────────────────────────────────────
-  if (action === 'add' && !settings.welcome) return;
+  // ── Welcome / goodbye / Group Brain onboarding ──────────────
+  const brainOnboarding =
+    action === 'add' &&
+    Boolean(brain?.enabled && brain.newcomerPhotoPolicy !== 'off');
+  if (action === 'add' && !settings.welcome && !brainOnboarding) return;
   if (action === 'remove' && !settings.goodbye) return;
   if (action !== 'add' && action !== 'remove') return;
 
@@ -119,11 +123,20 @@ export async function handleGroupParticipantsUpdate(
   for (const jid of participants) {
     const userTag = `@${jid.split('@')[0]}`;
     if (action === 'add') {
+      if (brain?.enabled) groupBrainRepo.markJoined(id, jid);
+      const purposeLine = brain?.purpose
+        ? `\n_${brain.purpose}_`
+        : '';
+      const photoLine = brainOnboarding
+        ? '\n\n📷 Please send the newcomer picture required by this group. I will record that it was submitted for the admins.'
+        : '';
       const tmpl =
         settings.welcomeText?.trim() ||
-        '👋 Welcome @user to *@group*!\nYou are member #@count. Enjoy your stay. 🕷️';
+        `👋 Welcome @user to *@group*!${purposeLine}`;
       await sock.sendMessage(id, {
-        text: renderTemplate(tmpl, { userTag, group: groupName, count, desc }),
+        text:
+          renderTemplate(tmpl, { userTag, group: groupName, count, desc }) +
+          photoLine,
         mentions: [jid],
       });
     } else if (action === 'remove') {

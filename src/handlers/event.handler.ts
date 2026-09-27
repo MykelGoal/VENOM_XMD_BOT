@@ -9,6 +9,7 @@ import { handleAntiDelete } from './antidelete.handler';
 import { safe } from './error.handler';
 import { settingsRepo } from '../database/repositories/settings.repo';
 import { startTournamentReminderLoop } from '../services/tournament-reminder.service';
+import { startGroupBrainReminderLoop } from '../services/groupbrain-reminder.service';
 import { logger } from '../utils/logger';
 
 /**
@@ -43,6 +44,7 @@ export function registerEventHandlers(sock: WASocket): void {
   // Keep the bot online and run reconnect-safe 6 PM tournament reminders.
   startPresenceLoop(sock);
   startTournamentReminderLoop(sock);
+  startGroupBrainReminderLoop(sock);
 }
 
 let presenceTimer: NodeJS.Timeout | undefined;
