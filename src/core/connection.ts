@@ -74,12 +74,24 @@ export async function startConnection(): Promise<void> {
       const { DisconnectReason } = getBaileys();
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
       const loggedOut = statusCode === DisconnectReason.loggedOut;
+      const replaced = statusCode === DisconnectReason.connectionReplaced;
 
       if (loggedOut) {
         logger.error(
           '❌ Logged out. Delete the /sessions folder and log in again.',
         );
         return;
+      }
+
+      if (replaced) {
+        // Code 440 means another process opened the same WhatsApp credentials.
+        // Reconnecting here makes both instances continuously kick each other.
+        // Exit once and let Render restart after the old/test instance is gone.
+        logger.error(
+          '⚠️ Session was replaced by another bot instance (code 440). Restarting this process to stop a reconnect loop...',
+        );
+        await sleep(1000);
+        process.exit(1);
       }
 
       logger.warn(

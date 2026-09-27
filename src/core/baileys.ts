@@ -11,6 +11,22 @@ type BaileysApi = typeof BaileysModule;
 
 let api: BaileysApi | undefined;
 let loading: Promise<BaileysApi> | undefined;
+let consoleSafetyInstalled = false;
+
+/**
+ * libsignal logs complete ratchet SessionEntry objects with console.info when
+ * replacing a message session. Those objects include private/ephemeral keys,
+ * so suppress only that dependency message before Baileys is loaded.
+ */
+export function installBaileysConsoleSafety(): void {
+  if (consoleSafetyInstalled) return;
+  consoleSafetyInstalled = true;
+  const originalInfo = console.info.bind(console);
+  console.info = (...args: unknown[]) => {
+    if (typeof args[0] === 'string' && args[0].startsWith('Closing session:')) return;
+    originalInfo(...args);
+  };
+}
 
 const nativeImport = new Function(
   'specifier',
@@ -19,6 +35,7 @@ const nativeImport = new Function(
 
 /** Load Baileys exactly once during application bootstrap. */
 export async function initBaileys(): Promise<BaileysApi> {
+  installBaileysConsoleSafety();
   if (api) return api;
   loading ??= nativeImport('@whiskeysockets/baileys');
   api = await loading;
