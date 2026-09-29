@@ -82,6 +82,71 @@ function findRunnableCommands(query: string): Command[] {
     .map((item) => item.cmd);
 }
 
+export interface NaturalCommandRequest {
+  command: string;
+  args: string;
+}
+
+/**
+ * Deterministic shortcuts for unmistakable natural-language command requests.
+ *
+ * Tool-capable models normally choose `run_command` themselves, but a small or
+ * overloaded fallback model can answer in prose instead. High-confidence
+ * requests belong here so the result does not depend on model judgement. Keep
+ * this deliberately narrow: ambiguous conversation must still go to the AI.
+ */
+export function parseNaturalCommandRequest(text: string): NaturalCommandRequest | null {
+  const clean = text
+    .trim()
+    .replace(/^\s*(?:hey\s+)?(?:venom|bot)\b[\s,:-]*/i, '')
+    .replace(/\s+/g, ' ');
+
+  const sensiWord = /\b(?:free\s*fire\s+|ff\s+)?sensi(?:tivity)?\b/i.exec(clean);
+  if (!sensiWord) return null;
+
+  const before = clean.slice(0, sensiWord.index).trim();
+  const clearlyRequested =
+    !before ||
+    /\b(?:give|show|send|drop|get|find|generate|calculate|need|want|best|please)\b/i.test(before) ||
+    /\bwhat(?:'s|\s+is)\b/i.test(before);
+  if (!clearlyRequested) return null;
+
+  const after = clean.slice(sensiWord.index + sensiWord[0].length);
+  const device = after
+    .replace(/^\s*(?:settings?\s*)?(?:for|of|on)?\s*/i, '')
+    // Members sometimes type the phone as though it were another command:
+    // “give me sensi .a7pro”. The dot is not part of the device name.
+    .replace(/^[.]+/, '')
+    .replace(/\s+(?:please|pls|abeg)\s*[?!.]*$/i, '')
+    .replace(/[?!.]+$/g, '')
+    .trim();
+
+  if (!device || /^(?:command|cmd|settings?|free\s*fire|ff)$/i.test(device)) return null;
+  return { command: 'sensi', args: device };
+}
+
+/**
+ * Run a high-confidence natural request without waiting for an LLM to select
+ * the tool. Returns a short memory summary, or null when no shortcut matched.
+ */
+export async function handleNaturalCommandRequest(
+  sock: WASocket,
+  msg: SerializedMessage,
+  text: string,
+): Promise<string | null> {
+  const request = parseNaturalCommandRequest(text);
+  if (!request) return null;
+
+  const result = await buildToolExecutor(sock, msg)('run_command', {
+    command: request.command,
+    args: request.args,
+  });
+  if (/^(?:ERROR:)|\bon cooldown\b/i.test(result)) {
+    await reply(sock, msg, result.replace(/^ERROR:\s*/i, '❌ '));
+  }
+  return `Executed .${request.command} ${request.args}`;
+}
+
 /* ──────────────────── purchase confirm gate (money safety) ───────────── */
 
 export interface PurchaseIntent {
@@ -295,7 +360,7 @@ export function aiToolsSystemPrompt(): string {
   return [
     '## YOUR TOOLS',
     'You can ACT, not just talk. When the user asks you to do something (play a song, check the weather, check their wallet, buy data), call the matching tool instead of telling them which command to type. After a tool runs, tell the user briefly what happened — never stay silent about an action you took.',
-    'Common safe command names include play, video, tiktok, weather, wiki, translate, lyrics, sticker and ssweb. If you do not know the exact command for a goal, call find_command first instead of guessing. Never announce a command list unless the user asks.',
+    'Common safe command names include sensi, play, video, tiktok, weather, wiki, translate, lyrics, sticker and ssweb. For requests such as “give me sensi for A7 Pro”, run sensi with “A7 Pro” as its args. If you do not know the exact command for a goal, call find_command first instead of guessing. Never announce a command list unless the user asks.',
     ...(vtuOn
       ? [
           '## MONEY RULES (strict)',

@@ -1,7 +1,12 @@
 import type { Command } from '../../types/command.type';
 import { reply, react } from '../../services/message.service';
 import { getAIReplyWithTools } from '../../services/ai.service';
-import { buildAITools, buildToolExecutor, aiToolsSystemPrompt } from '../../services/ai-tools.service';
+import {
+  aiToolsSystemPrompt,
+  buildAITools,
+  buildToolExecutor,
+  handleNaturalCommandRequest,
+} from '../../services/ai-tools.service';
 
 const ai: Command = {
   name: 'ai',
@@ -15,6 +20,10 @@ const ai: Command = {
       await reply(sock, msg, 'ℹ️ Usage: *ai <your question>*');
       return;
     }
+    // Clear natural command requests should work even when the active AI
+    // provider is weak at function calling or temporarily falls back.
+    if (await handleNaturalCommandRequest(sock, msg, prompt)) return;
+
     await react(sock, msg, '🤖');
     // Show "typing…" so it feels responsive while the model generates.
     await sock.sendPresenceUpdate('composing', msg.chat).catch(() => {});

@@ -20,6 +20,7 @@ import {
   aiToolsSystemPrompt,
   buildAITools,
   buildToolExecutor,
+  handleNaturalCommandRequest,
   handlePendingIntentMessage,
 } from '../services/ai-tools.service';
 import {
@@ -324,6 +325,16 @@ async function aiConverse(
   incomingWasVoice: boolean,
 ): Promise<void> {
   const remember = memoryEnabled();
+
+  // Do not leave clear command requests to model discretion. For example,
+  // “Venom give me sensi .a7pro” should execute `.sensi a7pro`, not produce a
+  // generic explanation of sensitivity settings.
+  const directAction = await handleNaturalCommandRequest(sock, msg, prompt);
+  if (directAction) {
+    if (remember) chatMemoryRepo.record(msg.chat, prompt, directAction);
+    return;
+  }
+
   const history = remember ? chatMemoryRepo.history(msg.chat) : [];
   const groupContext = msg.isGroup ? buildGroupBrainContext(msg.chat) : '';
   const system = [buildVenomBrain(), groupContext].filter(Boolean).join('\n\n');
