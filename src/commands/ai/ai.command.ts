@@ -12,7 +12,7 @@ const ai: Command = {
   name: 'ai',
   aliases: ['gpt', 'ask', 'bot'],
   category: 'ai',
-  description: 'Ask the AI assistant anything — it can even run commands for you.',
+  description: 'Ask Venom anything — it can also run safe commands for you.',
   usage: 'ai <your question or request>',
   async run({ sock, msg, text }) {
     const prompt = text || msg.quoted?.body;
@@ -24,7 +24,7 @@ const ai: Command = {
     // provider is weak at function calling or temporarily falls back.
     if (await handleNaturalCommandRequest(sock, msg, prompt)) return;
 
-    await react(sock, msg, '🤖');
+    await react(sock, msg, '🕷️');
     // Show "typing…" so it feels responsive while the model generates.
     await sock.sendPresenceUpdate('composing', msg.chat).catch(() => {});
     const answer = await getAIReplyWithTools({

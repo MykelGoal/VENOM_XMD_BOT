@@ -121,4 +121,7 @@ test('the core AI prompt is lean and does not inject the full menu or social pro
   assert.doesNotMatch(brain, /COMPLETE COMMAND LIST|follow .*TikTok|star .*GitHub/i);
   assert.match(brain, /Help first/);
   assert.match(brain, /not the owner and not a human/);
+  assert.match(brain, /Never introduce or label yourself/);
+  assert.match(brain, /Name: Venom\./);
+  assert.doesNotMatch(brain, /Name: Venom AI/);
 });
