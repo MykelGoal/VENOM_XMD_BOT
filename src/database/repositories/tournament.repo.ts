@@ -202,6 +202,12 @@ export const tournamentRepo = {
   markPaymentProof(
     code: string,
     identity: string,
+    proof: {
+      reviewId?: string;
+      reviewMessageId?: string;
+      fingerprint?: string;
+      ocrSummary?: string;
+    } = {},
   ): { tournament: TournamentModel; player: TournamentPlayer } {
     const tournament = getRequired(code);
     const player = tournamentRepo.findPlayer(code, identity);
@@ -210,8 +216,52 @@ export const tournamentRepo = {
       throw new Error('PAYMENT_NOT_PENDING');
     }
     player.paymentProofSubmittedAt = Date.now();
+    if (proof.reviewId) player.paymentProofReviewId = proof.reviewId;
+    if (proof.reviewMessageId) player.paymentProofReviewMessageId = proof.reviewMessageId;
+    if (proof.fingerprint) player.paymentProofFingerprint = proof.fingerprint;
+    if (proof.ocrSummary) player.paymentProofOcrSummary = proof.ocrSummary.slice(0, 500);
     save(tournament);
     return { tournament, player };
+  },
+
+  bindPaymentReviewMessage(
+    code: string,
+    identity: string,
+    reviewMessageId: string,
+  ): { tournament: TournamentModel; player: TournamentPlayer } {
+    const tournament = getRequired(code);
+    const player = tournamentRepo.findPlayer(code, identity);
+    if (!player) throw new Error('PLAYER_NOT_FOUND');
+    player.paymentProofReviewMessageId = reviewMessageId;
+    save(tournament);
+    return { tournament, player };
+  },
+
+  findPendingReview(reviewId: string):
+    | { tournament: TournamentModel; player: TournamentPlayer }
+    | undefined {
+    const normalized = reviewId.trim().toUpperCase();
+    for (const tournament of tournaments.all()) {
+      const player = tournament.participants.find(
+        (entry) =>
+          entry.paymentStatus === 'pending' &&
+          entry.paymentProofReviewId?.toUpperCase() === normalized,
+      );
+      if (player) return { tournament, player };
+    }
+    return undefined;
+  },
+
+  findProofFingerprint(fingerprint: string):
+    | { tournament: TournamentModel; player: TournamentPlayer }
+    | undefined {
+    for (const tournament of tournaments.all()) {
+      const player = tournament.participants.find(
+        (entry) => entry.paymentProofFingerprint === fingerprint,
+      );
+      if (player) return { tournament, player };
+    }
+    return undefined;
   },
 
   approvedPlayers(code: string): TournamentPlayer[] {

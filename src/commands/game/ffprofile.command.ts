@@ -1,7 +1,12 @@
 import type { Command } from '../../types/command.type';
 import { reply, react } from '../../services/message.service';
-import { getFFProfile, FF_REGIONS, type FFProfile } from '../../services/freefire.service';
-import { env } from '../../config';
+import {
+  getFFProfile,
+  FF_REGIONS,
+  hasFreeFireApiKey,
+  type FFProfile,
+} from '../../services/freefire.service';
+import { renderFreeFireProfileCard } from '../../services/report-card.service';
 
 /**
  * .ffprofile <uid> [region] — real Free Fire player info by UID.
@@ -50,7 +55,16 @@ const ffprofile: Command = {
     try {
       const p = await getFFProfile(uid, region);
       await react(sock, msg, '✅');
-      await reply(sock, msg, formatProfile(p));
+      try {
+        const card = await renderFreeFireProfileCard(p);
+        await sock.sendMessage(
+          msg.chat,
+          { image: card, caption: formatProfile(p) },
+          { quoted: msg.raw },
+        );
+      } catch {
+        await reply(sock, msg, formatProfile(p));
+      }
     } catch (err) {
       await react(sock, msg, '❌');
       const code = err instanceof Error ? err.message : 'UNKNOWN';
@@ -73,9 +87,9 @@ const ffprofile: Command = {
           [
             '⚠️ Free Fire lookup is not configured.',
             '',
-            env.freefire.apiKey
+            hasFreeFireApiKey()
               ? 'The lookup service is temporarily down. Please try again shortly.'
-              : '_Owner:_ set a free *FREEFIRE_API_KEY* (register at developers.freefirecommunity.com) for reliable lookups.',
+              : '_Owner:_ set a Free Fire profile key privately with `.setkey freefire <key>` for more reliable lookups.',
           ].join('\n'),
         );
       } else {
@@ -104,6 +118,7 @@ function formatProfile(p: FFProfile): string {
     line('⭐ Level:', p.level),
     line('❤️ Likes:', p.likes),
     line('🏅 Honor Score:', p.honorScore),
+    line('🎖️ Verified badges:', p.badges?.join(', ')),
     '',
     line('🔫 BR Rank:', p.brRank),
     line('🔫 BR Points:', p.brPoints),

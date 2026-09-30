@@ -27,6 +27,7 @@ const operationalCollections = [
   'notes',
   'settings',
   'tournaments',
+  'tournament_sessions',
   'users',
   'voiceclones',
   'wallets',

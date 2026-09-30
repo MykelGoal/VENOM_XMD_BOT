@@ -8,6 +8,7 @@ import { startMemorySync } from './services/memorysync.service';
 import { initMongo, hydrateMirroredCollections } from './database/mongo';
 import './database/repositories/register';
 import { initBaileys } from './core/baileys';
+import { restoreCompleteAuthState } from './core/auth-persistence';
 
 const BANNER = `
 ╭──────────────────────────────╮
@@ -39,18 +40,19 @@ async function main(): Promise<void> {
   // Bind $PORT so free web hosts (Render/Koyeb/Railway) keep the app alive.
   startKeepAlive();
 
-  // If SESSION_ID is set, restore creds before connecting (skips QR/pairing).
+  // Mongo must be ready before auth restoration: the encrypted archive holds
+  // creds plus every Signal/app-state key needed to decrypt incoming messages.
+  await initMongo();
+  await hydrateMirroredCollections();
+  await restoreCompleteAuthState();
+
+  // SESSION_ID remains the bootstrap/fallback. Older session IDs contain only
+  // creds.json, so rotate/re-pair once after deploying complete persistence.
   await restoreSessionFromEnv();
 
   // Optional: hydrate AI conversation memory from the remote store and keep
   // it synced (no-op unless the owner set MEMORY_URL).
   startMemorySync();
-
-  // MongoDB persistence for operational state (settings, users, wallets,
-  // payments and tournaments). Runs before WhatsApp so a redeploy restores
-  // everything before any command or event handler can use it.
-  await initMongo();
-  await hydrateMirroredCollections();
 
   await startConnection();
 }

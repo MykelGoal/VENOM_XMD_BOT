@@ -28,6 +28,12 @@ import {
   removeClubkonnectCredentials,
   setClubkonnectCredentials,
 } from '../../services/clubkonnect.service';
+import {
+  effectiveFreeFireApiKey,
+  removeRuntimeFreeFireApiKey,
+  setRuntimeFreeFireApiKey,
+} from '../../services/freefire.service';
+import { flushMongo, isMongoEnabled } from '../../database/mongo';
 
 /**
  * Owner command to set AI provider API keys at runtime — no host dashboard,
@@ -52,6 +58,27 @@ const KEY_PREFIX: Record<string, string[]> = {
   flutterwave: ['FLWSECK'],
 };
 
+async function runtimePersistence(): Promise<{ ok: boolean; line: string }> {
+  if (!isMongoEnabled()) {
+    return {
+      ok: true,
+      line: '⚠️ Saved locally only. Configure a working *MONGO_URI* before redeploying.',
+    };
+  }
+  try {
+    await flushMongo();
+    return {
+      ok: true,
+      line: '💾 Saved durably to *MongoDB* — it will survive restarts and redeploys.',
+    };
+  } catch {
+    return {
+      ok: false,
+      line: '❌ MongoDB persistence failed. The value may work in this process but is *not confirmed redeploy-safe*. Fix MongoDB and save it again.',
+    };
+  }
+}
+
 const HELP = [
   '🔑 *VENOM AI — Key Manager* (owner only)',
   '',
@@ -60,7 +87,7 @@ const HELP = [
   '• `.setkey list` — show providers (masked)',
   '• `.setkey remove <provider>` — remove a stored key',
   '',
-  '*Providers:* deepseek · gemini · openrouter · groq · openai · flutterwave (collections) · clubkonnect (data)',
+  '*Providers:* deepseek · gemini · openrouter · groq · openai · freefire (profile lookup) · flutterwave (collections) · clubkonnect (data)',
   '',
   '_Example:_ `.setkey gemini AIzaSyD...`',
   '_Takes effect immediately. Runtime keys override env vars._',
@@ -110,6 +137,13 @@ const setkey: Command = {
             ? `🟢 credentials set (${clubkonnectCredentialSource()})`
             : '⚪ no credentials'
         }`,
+        `🎮 Free Fire profile lookup: ${
+          settingsRepo.get('api.key.freefire')
+            ? '🟢 key set (runtime)'
+            : effectiveFreeFireApiKey()
+              ? '🟢 from env'
+              : '⚪ no key'
+        }`,
         '',
         '_Set one with_ `.setkey <provider> <key>`',
       ];
@@ -124,17 +158,15 @@ const setkey: Command = {
       if (provider === 'clubkonnect' || provider === 'clubconnect') {
         const had = removeClubkonnectCredentials();
         const fallback = clubkonnectCredentialSource();
-        await reply(
-          sock,
-          msg,
-          had
-            ? fallback === 'environment'
-              ? '🗑️ Removed the runtime *ClubKonnect* credentials. Environment credentials are still active.'
-              : '🗑️ Removed the *ClubKonnect* credentials. Data fulfilment falls back to Flutterwave if configured.'
-            : fallback === 'environment'
-              ? 'ℹ️ ClubKonnect is configured through environment variables; there is no runtime copy to remove.'
-              : 'ℹ️ No ClubKonnect credentials were stored.',
-        );
+        const persistence = had ? await runtimePersistence() : undefined;
+        const result = had
+          ? fallback === 'environment'
+            ? '🗑️ Removed the runtime *ClubKonnect* credentials. Environment credentials are still active.'
+            : '🗑️ Removed the *ClubKonnect* credentials. Data fulfilment falls back to Flutterwave if configured.'
+          : fallback === 'environment'
+            ? 'ℹ️ ClubKonnect is configured through environment variables; there is no runtime copy to remove.'
+            : 'ℹ️ No ClubKonnect credentials were stored.';
+        await reply(sock, msg, [result, persistence?.line].filter(Boolean).join('\n'));
         return;
       }
 
@@ -142,12 +174,31 @@ const setkey: Command = {
       if (provider === 'flutterwave') {
         const had = Boolean(settingsRepo.get('vtu.flwsecret'));
         settingsRepo.set('vtu.flwsecret', '');
+        const persistence = had ? await runtimePersistence() : undefined;
         await reply(
           sock,
           msg,
-          had
-            ? '🗑️ Removed the *Flutterwave* key. VTU sales are now off (unless FLW_SECRET_KEY is set in env).'
-            : 'ℹ️ No Flutterwave key was stored.',
+          [
+            had
+              ? '🗑️ Removed the *Flutterwave* key. VTU sales are now off (unless FLW_SECRET_KEY is set in env).'
+              : 'ℹ️ No Flutterwave key was stored.',
+            persistence?.line,
+          ].filter(Boolean).join('\n'),
+        );
+        return;
+      }
+      if (provider === 'freefire') {
+        const had = removeRuntimeFreeFireApiKey();
+        const persistence = had ? await runtimePersistence() : undefined;
+        await reply(
+          sock,
+          msg,
+          [
+            had
+              ? '🗑️ Removed the runtime *Free Fire* profile key. The environment key or keyless fallback may still be used.'
+              : 'ℹ️ No runtime Free Fire key was stored.',
+            persistence?.line,
+          ].filter(Boolean).join('\n'),
         );
         return;
       }
@@ -160,6 +211,7 @@ const setkey: Command = {
         return;
       }
       if (removeRuntimeAIKey(provider)) {
+        const persistence = await runtimePersistence();
         await reply(
           sock,
           msg,
@@ -167,7 +219,7 @@ const setkey: Command = {
             configuredProviders().includes(provider)
               ? '↩️ Falling back to the env variable key.'
               : '⚪ No env key either — provider is now inactive.'
-          }`,
+          }\n${persistence.line}`,
         );
       } else {
         await reply(
@@ -204,10 +256,11 @@ const setkey: Command = {
         return;
       }
       setRuntimeAIModel(provider, model);
+      const persistence = await runtimePersistence();
       await reply(
         sock,
         msg,
-        `✅ *${provider}* model set → ${model}\nTest with *.ai hello*`,
+        `✅ *${provider}* model set → ${model}\n${persistence.line}\nTest with *.ai hello*`,
       );
       return;
     }
@@ -215,13 +268,19 @@ const setkey: Command = {
     // ── .setkey <provider> <key> ─────────────────────────────
     const provider = sub;
 
-    if ((provider === 'clubkonnect' || provider === 'flutterwave') && msg.isGroup) {
+    if (
+      (provider === 'clubkonnect' ||
+        provider === 'flutterwave' ||
+        provider === 'freefire' ||
+        AI_PROVIDER_NAMES.includes(provider)) &&
+      msg.isGroup
+    ) {
       try {
         await sock.sendMessage(msg.chat, { delete: msg.raw.key });
       } catch {
         /* best-effort removal of the credential-bearing message */
       }
-      await reply(sock, msg, '🔒 Send payment-provider credentials only in my private DM, never in a group.');
+      await reply(sock, msg, '🔒 Send API/payment credentials only in my private DM, never in a group.');
       return;
     }
 
@@ -248,11 +307,12 @@ const setkey: Command = {
         return;
       }
       setClubkonnectCredentials(userId.toUpperCase(), apiKey);
+      const persistence = await runtimePersistence();
 
       await reply(
         sock,
         msg,
-        '✅ *ClubKonnect* saved as the primary data provider.\n\nRun *.vtu check*, then *.data mtn*.\n_Never post the API key in a group or public chat._',
+        `✅ *ClubKonnect* is active as the primary data provider.\n${persistence.line}\n\nRun *.vtu check*, then *.data mtn*.\n_Never post the API key in a group or public chat._`,
       );
       return;
     }
@@ -279,14 +339,36 @@ const setkey: Command = {
         return;
       }
       settingsRepo.set('vtu.flwsecret', key);
+      const persistence = await runtimePersistence();
 
       const keyMode = isFlutterwaveTestSecretKey(key) ? 'TEST' : 'LIVE';
       await reply(
         sock,
         msg,
-        `✅ *Flutterwave* ${keyMode} key saved — VTU merchant mode is active!\n\n` +
-          'Run *.vtu check* first, then use *.fund 500* to create a checkout link.\n\n' +
+        `✅ *Flutterwave* ${keyMode} key is active for bank-transfer collection.\n${persistence.line}\n\n` +
+          'Run *.vtu check* first, then use *.fund 500* to create a bank-transfer checkout.\n\n' +
           '_Never post this secret key in a group or public chat._',
+      );
+      return;
+    }
+
+    if (provider === 'freefire') {
+      try {
+        await sock.sendMessage(msg.chat, { delete: msg.raw.key });
+      } catch {
+        /* best-effort credential cleanup */
+      }
+      const key = (args[1] ?? '').trim();
+      if (!key || args.length > 2 || key.length < 16) {
+        await reply(sock, msg, 'ℹ️ Usage in my private DM: *setkey freefire YOUR_API_KEY*');
+        return;
+      }
+      setRuntimeFreeFireApiKey(key);
+      const persistence = await runtimePersistence();
+      await reply(
+        sock,
+        msg,
+        `✅ Free Fire profile lookup key is active.\n${persistence.line}\nTest with *.ffprofile UID REGION*.`,
       );
       return;
     }
@@ -295,7 +377,7 @@ const setkey: Command = {
       await reply(
         sock,
         msg,
-        `❌ Unknown provider *${provider}*.\nUse: ${AI_PROVIDER_NAMES.join(' · ')}`,
+        `❌ Unknown provider *${provider}*.\nUse: ${[...AI_PROVIDER_NAMES, 'freefire', 'flutterwave', 'clubkonnect'].join(' · ')}`,
       );
       return;
     }
@@ -325,6 +407,7 @@ const setkey: Command = {
         : '';
 
     setRuntimeAIKey(provider, key);
+    const persistence = await runtimePersistence();
 
     // Best-effort: delete the owner's message so the raw key doesn't linger.
     let deleted = true;
@@ -363,16 +446,18 @@ const setkey: Command = {
           `⚠️ Host save failed (${result.error || 'unknown'}). The key still works now (saved locally) but may not survive a redeploy.`;
       }
     } else {
-      hostLine =
-        `ℹ️ _Tip:_ to make keys survive redeploys, set *RENDER_API_KEY* + *RENDER_SERVICE_ID* on your host. (Right now this key is saved locally and works until the next redeploy.)`;
+      hostLine = isMongoEnabled()
+        ? 'ℹ️ Host environment sync is optional because MongoDB runtime-key persistence is configured.'
+        : 'ℹ️ _Tip:_ configure *MONGO_URI* (preferred) or host environment sync before redeploying.';
     }
 
     await reply(
       sock,
       msg,
       [
-        `✅ *${provider}* key saved — ${maskKey(key)}`,
+        `✅ *${provider}* key is active — ${maskKey(key)}`,
         '⚡ Takes effect immediately.',
+        persistence.line,
         deleted
           ? '🧹 Your message with the key was auto-deleted.'
           : '⚠️ I could not delete your message — please delete it, it contains the key!',

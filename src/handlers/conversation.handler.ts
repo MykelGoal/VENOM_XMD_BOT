@@ -35,6 +35,8 @@ import { isSpeakableLength, speakText } from '../services/tts.service';
 import { downloadMedia, toVoiceNote } from '../services/media.service';
 import { logger } from '../utils/logger';
 import { transcribeVoiceNote } from './voice.handler';
+import { handleOnboardingIntroduction } from '../services/onboarding.service';
+import { handleNaturalTournament } from '../services/tournament-natural.service';
 
 /**
  * Handle non-command conversation features: purchase confirmations, Group
@@ -46,6 +48,13 @@ export async function handleConversation(
 ): Promise<void> {
   // Purchase confirmation is deterministic and runs even when AI mode is off.
   if (await handlePendingIntentMessage(sock, msg)) return;
+
+  // Registration, receipts and exact quoted owner decisions are deterministic.
+  if (await handleNaturalTournament(sock, msg)) return;
+
+  // Structured newcomer introductions are parsed without spending AI quota.
+  // Raw introduction text is not retained after the compact profile is saved.
+  if (await handleOnboardingIntroduction(sock, msg)) return;
 
   const brain = msg.isGroup ? groupBrainRepo.get(msg.chat) : undefined;
   if (brain?.enabled) {

@@ -10,6 +10,11 @@ import { registerVtuNotifier, resumePendingVtu, setVtuBotPhone } from '../servic
 import { sendText } from '../services/message.service';
 import { syncSessionToCloud } from './session';
 import { getBaileys } from './baileys';
+import {
+  clearCompleteAuthState,
+  completeAuthPersistenceConfigured,
+  persistCompleteAuthState,
+} from './auth-persistence';
 
 let pairingRequested = false;
 
@@ -61,6 +66,13 @@ export async function startConnection(): Promise<void> {
     // ── Connected ─────────────────────────────────────────────
     if (connection === 'open') {
       logger.info(`✅ ${env.botName} connected as ${sock.user?.id}`);
+      if (completeAuthPersistenceConfigured()) {
+        await persistCompleteAuthState().catch((err) =>
+          logger.error({ err }, 'Initial complete auth-state backup failed'),
+        );
+      } else {
+        logger.warn('WhatsApp auth state is not redeploy-safe. Configure MONGO_URI and AUTH_STATE_SECRET before relying on this session.');
+      }
       await sendStartupMessage(sock);
       await onFirstConnect(sock);
 
@@ -77,6 +89,9 @@ export async function startConnection(): Promise<void> {
       const replaced = statusCode === DisconnectReason.connectionReplaced;
 
       if (loggedOut) {
+        await clearCompleteAuthState().catch((err) =>
+          logger.error({ err }, 'Could not clear logged-out auth archive'),
+        );
         logger.error(
           '❌ Logged out. Delete the /sessions folder and log in again.',
         );

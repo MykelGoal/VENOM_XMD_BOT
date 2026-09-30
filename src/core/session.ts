@@ -11,8 +11,9 @@ import { logger } from '../utils/logger';
  *
  * Deployers pair once on the VENOM session site, then paste the resulting
  * session string into the `SESSION_ID` env var. On boot we resolve it into a
- * real Baileys `creds.json` inside the sessions folder, so the bot starts
- * already authenticated — no QR scan on the server.
+ * Baileys `creds.json` bootstrap inside the sessions folder. This can avoid a
+ * QR scan, but creds.json is NOT the complete Signal state; the encrypted
+ * Mongo archive in auth-persistence.ts is what makes redeploys reliable.
  *
  * Three formats are accepted:
  *
@@ -20,9 +21,9 @@ import { logger } from '../utils/logger';
  *   2. Short  →  "VENOM-XXXX-XXXX"                        (fetched from the site)
  *   3. Plain  →  "eyJ..."  (base64 of creds.json)         (legacy)
  *
- * The short ID is PERMANENT (cloud-backed on the site). We also keep the cloud
- * copy fresh: on every creds rotation we push the new creds back, so a restart
- * always finds a valid session.
+ * A short ID keeps the credentials bootstrap fresh. Complete Signal sessions,
+ * pre-keys and app-state keys are persisted separately and encrypted in Mongo;
+ * restoring only this cloud copy can produce a connected-but-one-tick bot.
  */
 
 const SHORT_RE = /^VENOM-[A-Z0-9]{4}-[A-Z0-9]{4}$/;

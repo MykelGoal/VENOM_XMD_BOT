@@ -8,6 +8,8 @@ import { logger } from '../utils/logger';
 import { groupRepo } from '../database/repositories/group.repo';
 import { groupBrainRepo } from '../database/repositories/groupbrain.repo';
 import { getGroupMetadata } from '../services/group.service';
+import { flushMongo } from '../database/mongo';
+import { onboardingPrompt } from '../services/onboarding.service';
 
 interface GroupParticipantsUpdate {
   id: string;
@@ -105,7 +107,24 @@ export async function handleGroupParticipantsUpdate(
   // ── Welcome / goodbye / Group Brain onboarding ──────────────
   const brainOnboarding =
     action === 'add' &&
-    Boolean(brain?.enabled && brain.newcomerPhotoPolicy !== 'off');
+    Boolean(
+      brain?.enabled &&
+      (brain.onboardingEnabled || brain.newcomerPhotoPolicy !== 'off'),
+    );
+
+  // Track joins/departures even when public welcome/goodbye messages are off.
+  if (action === 'add' && brain?.enabled) {
+    for (const jid of participants) groupBrainRepo.markJoined(id, jid);
+    await flushMongo();
+  }
+
+  // Empty temporary departure shells are purged after the retention grace
+  // period; useful normalized introductions are retained.
+  if (action === 'remove' && brain?.enabled) {
+    for (const jid of participants) groupBrainRepo.markLeft(id, jid);
+    await flushMongo();
+  }
+
   if (action === 'add' && !settings.welcome && !brainOnboarding) return;
   if (action === 'remove' && !settings.goodbye) return;
   if (action !== 'add' && action !== 'remove') return;
@@ -123,12 +142,14 @@ export async function handleGroupParticipantsUpdate(
   for (const jid of participants) {
     const userTag = `@${jid.split('@')[0]}`;
     if (action === 'add') {
-      if (brain?.enabled) groupBrainRepo.markJoined(id, jid);
       const purposeLine = brain?.purpose
         ? `\n_${brain.purpose}_`
         : '';
-      const photoLine = brainOnboarding
-        ? '\n\n📷 Please send the newcomer picture required by this group. I will record that it was submitted for the admins.'
+      const introLine = brain?.onboardingEnabled
+        ? `\n\n${onboardingPrompt()}`
+        : '';
+      const photoLine = brain && brain.newcomerPhotoPolicy !== 'off'
+        ? '\n\n📷 Please also send the newcomer picture required by this group. I will record submission status for the admins.'
         : '';
       const tmpl =
         settings.welcomeText?.trim() ||
@@ -136,6 +157,7 @@ export async function handleGroupParticipantsUpdate(
       await sock.sendMessage(id, {
         text:
           renderTemplate(tmpl, { userTag, group: groupName, count, desc }) +
+          introLine +
           photoLine,
         mentions: [jid],
       });

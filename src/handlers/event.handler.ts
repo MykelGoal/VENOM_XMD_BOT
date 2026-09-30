@@ -11,6 +11,7 @@ import { settingsRepo } from '../database/repositories/settings.repo';
 import { startTournamentReminderLoop } from '../services/tournament-reminder.service';
 import { startGroupBrainReminderLoop } from '../services/groupbrain-reminder.service';
 import { logger } from '../utils/logger';
+import { startCommunityManagerLoop } from '../services/community-manager.service';
 
 /**
  * Binds all sock.ev listeners in one place. Called once per socket
@@ -45,6 +46,7 @@ export function registerEventHandlers(sock: WASocket): void {
   startPresenceLoop(sock);
   startTournamentReminderLoop(sock);
   startGroupBrainReminderLoop(sock);
+  startCommunityManagerLoop(sock);
 }
 
 let presenceTimer: NodeJS.Timeout | undefined;

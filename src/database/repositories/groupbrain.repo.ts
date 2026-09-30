@@ -6,6 +6,7 @@ import type {
   GroupBrainMode,
   GroupBrainModel,
   GroupBrainObservation,
+  GroupBrainMemberIntro,
   NewcomerPhotoPolicy,
 } from '../models/groupbrain.model';
 
@@ -34,6 +35,13 @@ function defaults(jid: string): GroupBrainModel {
     observations: [],
     roomAdmins: [],
     newcomerPhotoPolicy: 'off',
+    onboardingEnabled: false,
+    onboardingCampaignActive: false,
+    communityManagerEnabled: false,
+    engagementEnabled: false,
+    ownerDigestEnabled: false,
+    weeklyActivityEnabled: false,
+    engagementIndex: 0,
     members: {},
     events: [],
     createdAt: now,
@@ -177,12 +185,220 @@ export const groupBrainRepo = {
     return save(brain);
   },
 
+  setOnboardingEnabled(jid: string, enabled: boolean): GroupBrainModel {
+    const brain = this.ensure(jid);
+    if (enabled) brain.enabled = true;
+    brain.onboardingEnabled = enabled;
+    if (!enabled) brain.onboardingCampaignActive = false;
+    return save(brain);
+  },
+
+  startOnboardingCampaign(
+    jid: string,
+    members: string[],
+    at = Date.now(),
+  ): GroupBrainModel {
+    const brain = this.ensure(jid);
+    brain.enabled = true;
+    brain.onboardingEnabled = true;
+    brain.onboardingCampaignActive = true;
+    brain.onboardingCampaignStartedAt = at;
+    for (const member of members) {
+      const number = digits(member);
+      if (!number) continue;
+      const current = brain.members[number];
+      brain.members[number] = {
+        ...current,
+        joinedAt: current?.joinedAt ?? at,
+        leftAt: undefined,
+        onboardingStartedAt: current?.intro ? current.onboardingStartedAt : at,
+      };
+    }
+    return save(brain);
+  },
+
+  stopOnboardingCampaign(jid: string): GroupBrainModel {
+    const brain = this.ensure(jid);
+    brain.onboardingCampaignActive = false;
+    return save(brain);
+  },
+
+  reconcileMemberAlias(
+    jid: string,
+    canonicalNumber: string,
+    aliasJid: string,
+  ): GroupBrainModel | undefined {
+    const brain = this.get(jid);
+    if (!brain) return undefined;
+    const canonical = digits(canonicalNumber);
+    const alias = digits(aliasJid);
+    if (!canonical || !alias || canonical === alias || !brain.members[alias]) return brain;
+    const aliasRecord = brain.members[alias];
+    const current = brain.members[canonical];
+    brain.members[canonical] = current
+      ? {
+          ...aliasRecord,
+          ...current,
+          intro: current.intro ?? aliasRecord.intro,
+          joinedAt: Math.min(current.joinedAt, aliasRecord.joinedAt),
+        }
+      : aliasRecord;
+    delete brain.members[alias];
+    return save(brain);
+  },
+
   markJoined(jid: string, member: string, at = Date.now()): GroupBrainModel {
     const brain = this.ensure(jid);
     const number = digits(member);
     if (!number) return brain;
-    brain.members[number] = { joinedAt: at };
+    const current = brain.members[number];
+    brain.members[number] = {
+      ...current,
+      joinedAt: at,
+      leftAt: undefined,
+      onboardingStartedAt: brain.onboardingEnabled && !current?.intro ? at : current?.onboardingStartedAt,
+    };
     return save(brain);
+  },
+
+  markLeft(jid: string, member: string, at = Date.now()): GroupBrainModel {
+    const brain = this.ensure(jid);
+    const number = digits(member);
+    if (!number) return brain;
+    const current = brain.members[number] ?? { joinedAt: at };
+    brain.members[number] = { ...current, leftAt: at };
+    return save(brain);
+  },
+
+  needsIntroduction(jid: string, member: string): boolean {
+    const brain = this.get(jid);
+    if (!brain?.onboardingEnabled) return false;
+    const record = brain.members[digits(member)];
+    return Boolean(record && !record.leftAt && !record.intro);
+  },
+
+  saveIntroduction(
+    jid: string,
+    member: string,
+    intro: Omit<GroupBrainMemberIntro, 'submittedAt' | 'verification'> & {
+      verification?: GroupBrainMemberIntro['verification'];
+    },
+  ): GroupBrainModel {
+    const brain = this.ensure(jid);
+    const number = digits(member);
+    if (!number) return brain;
+    const current = brain.members[number] ?? {
+      joinedAt: Date.now(),
+      onboardingStartedAt: Date.now(),
+    };
+    brain.members[number] = {
+      ...current,
+      leftAt: undefined,
+      intro: {
+        preferredName: cleanText(intro.preferredName, 40),
+        freeFireName: cleanText(intro.freeFireName, 40),
+        freeFireUid: digits(intro.freeFireUid).slice(0, 15),
+        region: cleanText(intro.region, 8).toUpperCase(),
+        role: intro.role,
+        submittedAt: Date.now(),
+        verification: intro.verification ?? 'pending',
+      },
+    };
+    if (
+      brain.onboardingCampaignActive &&
+      Object.values(brain.members)
+        .filter((member) => !member.leftAt)
+        .every((member) => Boolean(member.intro))
+    ) {
+      brain.onboardingCampaignActive = false;
+      brain.onboardingCampaignCompletedAt = Date.now();
+    }
+    return save(brain);
+  },
+
+  updateIntroductionVerification(
+    jid: string,
+    member: string,
+    verification: GroupBrainMemberIntro['verification'],
+    canonicalName?: string,
+  ): GroupBrainModel {
+    const brain = this.ensure(jid);
+    const record = brain.members[digits(member)];
+    if (!record?.intro) return brain;
+    record.intro.verification = verification;
+    record.intro.verifiedAt = verification === 'verified' ? Date.now() : undefined;
+    if (canonicalName?.trim()) record.intro.freeFireName = cleanText(canonicalName, 40);
+    return save(brain);
+  },
+
+  onboardingCounts(jid: string): {
+    tracked: number;
+    completed: number;
+    pending: number;
+    verified: number;
+  } {
+    const members = Object.values(this.get(jid)?.members ?? {}).filter((member) => !member.leftAt);
+    const completed = members.filter((member) => Boolean(member.intro)).length;
+    const verified = members.filter((member) => member.intro?.verification === 'verified').length;
+    return {
+      tracked: members.length,
+      completed,
+      pending: members.length - completed,
+      verified,
+    };
+  },
+
+  setCommunityManager(jid: string, enabled: boolean): GroupBrainModel {
+    const brain = this.ensure(jid);
+    brain.enabled = enabled || brain.enabled;
+    brain.communityManagerEnabled = enabled;
+    brain.engagementEnabled = enabled;
+    brain.ownerDigestEnabled = enabled;
+    brain.weeklyActivityEnabled = enabled;
+    return save(brain);
+  },
+
+  configureCommunityFeature(
+    jid: string,
+    feature: 'engagement' | 'digest' | 'weekly',
+    enabled: boolean,
+  ): GroupBrainModel {
+    const brain = this.ensure(jid);
+    if (feature === 'engagement') brain.engagementEnabled = enabled;
+    if (feature === 'digest') brain.ownerDigestEnabled = enabled;
+    if (feature === 'weekly') brain.weeklyActivityEnabled = enabled;
+    return save(brain);
+  },
+
+  markCommunityRun(
+    jid: string,
+    kind: 'digest' | 'weekly' | 'engagement',
+    date: string,
+  ): GroupBrainModel {
+    const brain = this.ensure(jid);
+    if (kind === 'digest') brain.lastOwnerDigestDate = date;
+    if (kind === 'weekly') brain.lastWeeklyActivityDate = date;
+    if (kind === 'engagement') {
+      brain.lastEngagementDate = date;
+      brain.engagementIndex = (brain.engagementIndex + 1) % 1000;
+    }
+    return save(brain);
+  },
+
+  /** Delete only empty/incomplete departure workflow shells after 30 days. */
+  cleanupDepartedMembers(jid: string, at = Date.now()): number {
+    const brain = this.ensure(jid);
+    const cutoff = at - 30 * 86_400_000;
+    let removed = 0;
+    for (const [number, member] of Object.entries(brain.members)) {
+      const usefulProfile = Boolean(member.intro || member.photoSubmittedAt);
+      if (member.leftAt && member.leftAt < cutoff && !usefulProfile) {
+        delete brain.members[number];
+        removed++;
+      }
+    }
+    if (removed) save(brain);
+    return removed;
   },
 
   needsPhoto(jid: string, member: string): boolean {

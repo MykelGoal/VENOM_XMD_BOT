@@ -1,12 +1,12 @@
 import type { Command } from '../../types/command.type';
 import { tournamentRepo } from '../../database/repositories/tournament.repo';
 import {
-  canManageTournament,
   flushTournament,
   sendPlayerDM,
   tournamentErrorMessage,
 } from '../../services/tournament.service';
 import { reply } from '../../services/message.service';
+import { isOwner } from '../../middleware/permission';
 
 const tourreject: Command = {
   name: 'tourreject',
@@ -23,16 +23,34 @@ const tourreject: Command = {
     try {
       const tournament = tournamentRepo.get(code);
       if (!tournament) throw new Error('TOURNAMENT_NOT_FOUND');
-      if (!(await canManageTournament(sock, msg, tournament))) {
-        await reply(sock, msg, '🚫 Only the tournament organizer or a group admin can reject registrations.');
+      if (!isOwner(msg.senderNumber)) {
+        await reply(sock, msg, '🚫 Only the configured owner can reject payment reviews.');
         return;
       }
       if (!identity) {
         await reply(sock, msg, `ℹ️ Usage: *${prefix}tourreject ${tournament.code} FreeFireUID*`);
         return;
       }
-      const { player } = tournamentRepo.rejectPlayer(tournament.code, identity);
-      await flushTournament();
+      const beforePlayer = tournamentRepo.findPlayer(tournament.code, identity);
+      const before = beforePlayer
+        ? {
+            paymentStatus: beforePlayer.paymentStatus,
+            approvedAt: beforePlayer.approvedAt,
+            approvedBy: beforePlayer.approvedBy,
+            rejectedAt: beforePlayer.rejectedAt,
+            checkedInAt: beforePlayer.checkedInAt,
+          }
+        : undefined;
+      const result = tournamentRepo.rejectPlayer(tournament.code, identity);
+      try {
+        await flushTournament();
+      } catch {
+        if (before) Object.assign(result.player, before);
+        tournamentRepo.save(result.tournament);
+        await flushTournament().catch(() => {});
+        throw new Error('PERSISTENCE_FAILED');
+      }
+      const { player } = result;
       await sendPlayerDM(
         sock,
         player,

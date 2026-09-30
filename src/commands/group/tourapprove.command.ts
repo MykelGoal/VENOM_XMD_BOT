@@ -1,7 +1,6 @@
 import type { Command } from '../../types/command.type';
 import { tournamentRepo } from '../../database/repositories/tournament.repo';
 import {
-  canManageTournament,
   flushTournament,
   postRegistrationMilestone,
   sendPlayerDM,
@@ -9,6 +8,7 @@ import {
   tournamentStorageReady,
 } from '../../services/tournament.service';
 import { reply } from '../../services/message.service';
+import { isOwner } from '../../middleware/permission';
 
 const tourapprove: Command = {
   name: 'tourapprove',
@@ -33,8 +33,8 @@ const tourapprove: Command = {
     try {
       const tournament = tournamentRepo.get(code);
       if (!tournament) throw new Error('TOURNAMENT_NOT_FOUND');
-      if (!(await canManageTournament(sock, msg, tournament))) {
-        await reply(sock, msg, '🚫 Only the tournament organizer or a group admin can approve payments.');
+      if (!isOwner(msg.senderNumber)) {
+        await reply(sock, msg, '🚫 Only the configured owner can approve tournament payments.');
         return;
       }
       if (!identity) {
@@ -42,12 +42,28 @@ const tourapprove: Command = {
         return;
       }
 
+      const beforePlayer = tournamentRepo.findPlayer(tournament.code, identity);
+      const before = beforePlayer
+        ? {
+            paymentStatus: beforePlayer.paymentStatus,
+            approvedAt: beforePlayer.approvedAt,
+            approvedBy: beforePlayer.approvedBy,
+            rejectedAt: beforePlayer.rejectedAt,
+          }
+        : undefined;
       const result = tournamentRepo.approvePlayer(
         tournament.code,
         identity,
         msg.senderNumber,
       );
-      await flushTournament();
+      try {
+        await flushTournament();
+      } catch {
+        if (before) Object.assign(result.player, before);
+        tournamentRepo.save(result.tournament);
+        await flushTournament().catch(() => {});
+        throw new Error('PERSISTENCE_FAILED');
+      }
       if (result.changed) {
         await sendPlayerDM(
           sock,

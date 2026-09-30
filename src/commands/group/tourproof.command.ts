@@ -1,11 +1,10 @@
 import type { Command } from '../../types/command.type';
 import { tournamentRepo } from '../../database/repositories/tournament.repo';
 import {
-  flushTournament,
   tournamentErrorMessage,
-  tournamentOwnerJid,
   tournamentStorageReady,
 } from '../../services/tournament.service';
+import { submitTournamentReceipt } from '../../services/tournament-natural.service';
 import { reply } from '../../services/message.service';
 
 const tourproof: Command = {
@@ -47,31 +46,7 @@ const tourproof: Command = {
         throw new Error('PAYMENT_NOT_PENDING');
       }
 
-      const organizerJid = tournamentOwnerJid(tournament);
-      await sock.sendMessage(organizerJid, {
-        text: [
-          `🧾 *NEW PAYMENT PROOF — ${tournament.code}*`,
-          `Player: ${player.nickname}`,
-          `Free Fire UID: ${player.freeFireUid}`,
-          `WhatsApp: ${player.number}`,
-          `Expected amount: ₦${tournament.entryFeeNaira.toLocaleString('en-NG')}`,
-          `Expected reference: ${tournament.code}-${player.freeFireUid.slice(-4)}`,
-          '',
-          '⚠️ Verify the credit inside your bank app; do not trust the screenshot alone.',
-          `Approve: *${prefix}tourapprove ${tournament.code} ${player.freeFireUid}*`,
-          `Reject: *${prefix}tourreject ${tournament.code} ${player.freeFireUid}*`,
-        ].join('\n'),
-      });
-      await sock.relayMessage(organizerJid, msg.raw.message!, {
-        messageId: undefined as never,
-      });
-      tournamentRepo.markPaymentProof(tournament.code, msg.senderNumber);
-      await flushTournament();
-      await reply(
-        sock,
-        msg,
-        '✅ Receipt sent privately to the organizer. Your status remains pending until the actual bank credit is verified.',
-      );
+      await submitTournamentReceipt(sock, msg, tournament, player);
     } catch (err) {
       await reply(sock, msg, `❌ ${tournamentErrorMessage(err)}`);
     }

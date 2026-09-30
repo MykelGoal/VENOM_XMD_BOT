@@ -1,10 +1,11 @@
 import { env } from '../config';
+import { settingsRepo } from '../database/repositories/settings.repo';
 import { logger } from '../utils/logger';
 
 /**
  * Free Fire player lookup by UID.
  *
- * Primary: developers.freefirecommunity.com (needs a free FREEFIRE_API_KEY;
+ * Primary: the third-party Free Fire Community developer API (needs a key;
  * this backend blocks generic scripting so we send an identifying User-Agent).
  * Fallback: unofficial keyless mirrors (jinix6-style) — used only if no key is
  * set or the primary fails; these go down often, hence the key is recommended.
@@ -32,14 +33,33 @@ export interface FFProfile {
   lastLogin?: string;
   createdAt?: string;
   bio?: string;
+  /** Only labels explicitly returned by the lookup provider; never inferred. */
+  badges?: string[];
   source: string;
 }
 
 export const FF_REGIONS = [
-  'ind', 'sg', 'br', 'id', 'tw', 'us', 'vn', 'th', 'me', 'pk', 'cis', 'bd', 'ru', 'eu', 'na',
+  'ind', 'sg', 'br', 'id', 'tw', 'us', 'vn', 'th', 'me', 'pk', 'cis', 'bd', 'ru', 'eu', 'na', 'ssa',
 ];
 
 const UA = 'VENOM-XMD/1.0 (+https://github.com/MykelGoal/VENOM_XMD_BOT)';
+const RUNTIME_KEY = 'api.key.freefire';
+
+export function effectiveFreeFireApiKey(): string {
+  return settingsRepo.get(RUNTIME_KEY)?.trim() || env.freefire.apiKey;
+}
+
+export function setRuntimeFreeFireApiKey(key: string): void {
+  settingsRepo.set(RUNTIME_KEY, key.trim());
+}
+
+export function removeRuntimeFreeFireApiKey(): boolean {
+  return settingsRepo.delete(RUNTIME_KEY);
+}
+
+export function hasFreeFireApiKey(): boolean {
+  return Boolean(effectiveFreeFireApiKey());
+}
 
 function withTimeout(ms: number): AbortSignal {
   const c = new AbortController();
@@ -62,8 +82,8 @@ function tsToDate(v: unknown): string | undefined {
   return d.toISOString().slice(0, 10);
 }
 
-/** Try the official keyed API. */
-async function fetchOfficial(uid: string, region: string): Promise<FFProfile> {
+/** Try the configured keyed community API. */
+async function fetchCommunity(uid: string, region: string): Promise<FFProfile> {
   const url = `https://developers.freefirecommunity.com/api/v1/info?region=${encodeURIComponent(
     region,
   )}&uid=${encodeURIComponent(uid)}`;
@@ -71,7 +91,7 @@ async function fetchOfficial(uid: string, region: string): Promise<FFProfile> {
     headers: {
       'User-Agent': UA,
       Accept: 'application/json',
-      'x-api-key': env.freefire.apiKey,
+      'x-api-key': effectiveFreeFireApiKey(),
     },
     signal: withTimeout(20000),
   });
@@ -156,10 +176,10 @@ export async function getFFProfile(uid: string, region: string): Promise<FFProfi
   const reg = region.toLowerCase();
   let lastErr: Error | null = null;
 
-  // 1) Official keyed API (preferred)
-  if (env.freefire.apiKey) {
+  // 1) Keyed API (preferred)
+  if (effectiveFreeFireApiKey()) {
     try {
-      return await fetchOfficial(uid, reg);
+      return await fetchCommunity(uid, reg);
     } catch (err) {
       lastErr = err as Error;
       if (lastErr.message === 'NOT_FOUND' || lastErr.message === 'RATE_LIMIT') throw lastErr;
@@ -183,6 +203,6 @@ export async function getFFProfile(uid: string, region: string): Promise<FFProfi
   }
 
   if (lastErr?.message === 'NOT_FOUND') throw new Error('NOT_FOUND');
-  if (!env.freefire.apiKey && bases.length === 0) throw new Error('NO_BACKEND');
+  if (!effectiveFreeFireApiKey() && bases.length === 0) throw new Error('NO_BACKEND');
   throw lastErr ?? new Error('NO_BACKEND');
 }

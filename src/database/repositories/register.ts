@@ -10,6 +10,7 @@ import './groupstats.repo';
 import './note.repo';
 import './settings.repo';
 import './tournament.repo';
+import './tournament-session.repo';
 import './user.repo';
 import './voice.repo';
 import './wallet.repo';

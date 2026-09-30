@@ -50,12 +50,16 @@
 | [![Heroku](https://img.shields.io/badge/🟣_DEPLOY_TO-HEROKU-430098?style=for-the-badge&logo=heroku&logoColor=white)](https://heroku.com/deploy?template=https://github.com/MykelGoal/VENOM_XMD_BOT) | [![Render](https://img.shields.io/badge/⬛_DEPLOY_TO-RENDER-009688?style=for-the-badge&logo=render&logoColor=white)](https://render.com/deploy?repo=https://github.com/MykelGoal/VENOM_XMD_BOT) |
 | [![Railway](https://img.shields.io/badge/🚂_DEPLOY_ON-RAILWAY-0B0D0E?style=for-the-badge&logo=railway&logoColor=white)](https://railway.app/new/template?template=https://github.com/MykelGoal/VENOM_XMD_BOT) | [![Koyeb](https://img.shields.io/badge/🔵_DEPLOY_TO-KOYEB-1E2430?style=for-the-badge&logo=koyeb&logoColor=white)](https://app.koyeb.com/deploy?type=git&repository=github.com/MykelGoal/VENOM_XMD_BOT&branch=main&name=venom-xmd) |
 
-*Only **two** settings — everything else has defaults:*
+*Two settings boot the bot; production Render deployments should also add MongoDB persistence:*
 
 | Variable | Example | |
 |:---------|:---------|:--|
 | `SESSION_ID` | `VENOM-XXXX-XXXX` | from the [session site](https://session-site-2odn.onrender.com) |
 | `OWNER_NUMBER` | `2348012345678` | your number, no `+` |
+| `MONGO_URI` | `mongodb+srv://…` | required for reliable state on ephemeral hosts |
+| `AUTH_STATE_SECRET` | random 32+ characters | encrypts the complete WhatsApp Signal-key archive |
+
+> `SESSION_ID` alone is a credentials bootstrap, not complete Baileys auth persistence. After deploying this version, rotate/re-pair once; Venom then encrypts and stores creds, Signal sessions, pre-keys and app-state keys in MongoDB. Keep `AUTH_STATE_SECRET` stable across redeploys.
 
 *Optional:* `MEMORY_URL=mantle:auto` — the AI remembers chats **across redeploys** (free, no signup, AES-256 encrypted; `.aimemory clear` to forget).
 
@@ -81,9 +85,9 @@ Run a 40-player, ₦1,000-entry solo tournament without flooding the group:
 
 - The owner saves the payout account privately once with `.touraccount BANK | NUMBER | NAME`.
 - `.tourcreate CODE | date/time` posts one launch announcement and tags members once—without exposing the account.
-- Players register with `.tourjoin`; the bot replies in DM with payment details and a unique transfer reference.
-- Receipt images/PDFs sent with `.tourproof` are forwarded privately to the first configured `OWNER_NUMBER` for real bank-app verification.
-- Admins approve privately with `.tourapprove`; the owner number receives every registration summary and forwarded receipt.
+- Players can ask naturally how to join, continue privately with nickname/UID, and receive the saved account plus a unique transfer reference; `.tourjoin` remains a fallback.
+- Receipt images/PDFs sent privately are fingerprinted for duplicate warning and forwarded to the first configured `OWNER_NUMBER`; `.tourproof` remains a fallback. The owner may explicitly opt in to masked, non-authoritative OCR with `.tourocr on`.
+- Screenshots and OCR never approve payment. Only the configured owner can confirm after checking the bank, either by replying `approve`/`reject` to the exact bound review message or with `.tourapprove`/`.tourreject`.
 - One compact hidden-tag reminder runs daily at 6 PM WAT, excluding already-approved players; `.tourreminder` can change or disable it.
 - Room IDs and passwords go only to checked-in players in DM.
 - `.tourround`, `.tourstandings`, and `.tourfinish` calculate and publish controlled round/final updates.
@@ -91,7 +95,7 @@ Run a 40-player, ₦1,000-entry solo tournament without flooding the group:
 
 Run `.tourhelp` for the complete organizer workflow. Tournament creation intentionally refuses to start when MongoDB is unavailable, preventing silent data loss on ephemeral hosts.
 
-With `MONGO_URI` configured, the same startup hydration also preserves group settings, access roles, users, economy records, notes, warnings, voice model IDs, wallets and payment state. Chat memory and WhatsApp sessions keep their dedicated persistence mechanisms.
+With `MONGO_URI` configured, startup hydration also preserves group settings, access roles, users, bounded activity aggregates, onboarding profiles, economy records, notes, warnings, voice model IDs, wallets and payment state. WhatsApp auth uses a separate AES-256-GCM encrypted Mongo archive bound to the current `SESSION_ID`; chat memory keeps its dedicated mechanism.
 
 ---
 
@@ -157,6 +161,16 @@ Admins can enable a durable, selective community assistant without making it rep
 ```
 
 Admins can also teach naturally: **“Venom, remember that our guild ID is 123456”** or schedule **“Venom, schedule room match tonight by 9pm.”** Official facts, room events, onboarding state and reminder delivery survive restarts through MongoDB. Casual recent context is bounded to 60 short, pseudonymized observations and expires after 48 hours.
+
+For community operations:
+
+```text
+.onboarding on                 # future newcomers
+.onboarding start confirm      # one-time hidden-tag campaign for current members
+.communitymanager on           # adaptive activities + private owner reports
+```
+
+Introductions extract only preferred name, IGN, UID, server and playing role. Activity intelligence stores rolling numerical buckets, excluding commands, Venom output, welcomes, reminders and system events. Autonomous polls/activities run at most once on Tue/Thu/Sat, only in daytime after a quiet period; Sunday weekly reports include a locally rendered activity card. There is no automatic nighttime group locking.
 
 Selective mode answers direct calls and relevant group questions while ignoring ordinary banter. It can understand directly addressed images through Gemini/OpenAI/OpenRouter vision; newcomer picture checks never identify people or infer sensitive traits. `.roommatch 9pm` sends private room-admin reminders 30 minutes before and one group reminder 10 minutes before.
 

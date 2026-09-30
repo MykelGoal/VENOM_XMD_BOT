@@ -33,6 +33,7 @@ const MIRRORED = [
   'notes',
   'settings',
   'tournaments',
+  'tournament_sessions',
   'users',
   'voiceclones',
   'wallets',
@@ -47,9 +48,39 @@ let enabled = false;
 
 /** In-order write queue — keeps Mongo consistent with the JSON store. */
 let chain: Promise<void> = Promise.resolve();
+/** Most recent mirror error, surfaced by flushMongo() to critical callers. */
+let mirrorFailure: Error | null = null;
 
 export function isMongoEnabled(): boolean {
   return enabled;
+}
+
+/** Read an application-encrypted private blob. Never mirrored to local JSON. */
+export async function readPrivateState(key: string): Promise<Record<string, unknown> | null> {
+  if (!enabled || !db) return null;
+  const doc = await db.collection('private_state').findOne({ _id: key as never });
+  if (!doc) return null;
+  const value = { ...doc } as Record<string, unknown>;
+  delete value._id;
+  return value;
+}
+
+/** Store an application-encrypted private blob directly in MongoDB. */
+export async function writePrivateState(
+  key: string,
+  value: Record<string, unknown>,
+): Promise<void> {
+  if (!enabled || !db) throw new Error('MONGO_UNAVAILABLE');
+  await db.collection('private_state').replaceOne(
+    { _id: key as never },
+    { ...value, _id: key } as never,
+    { upsert: true },
+  );
+}
+
+export async function deletePrivateState(key: string): Promise<void> {
+  if (!enabled || !db) return;
+  await db.collection('private_state').deleteOne({ _id: key as never });
 }
 
 /** Connect if MONGO_URI is set. Never throws — falls back to local JSON. */
@@ -100,7 +131,10 @@ export function mirrorSet(name: string, key: string, doc: unknown): void {
         { upsert: true },
       ),
     )
-    .catch((err) => logger.warn({ err }, `mongo mirror write failed: ${name}/${key}`))
+    .catch((err) => {
+      mirrorFailure = err instanceof Error ? err : new Error(String(err));
+      logger.warn({ err }, `mongo mirror write failed: ${name}/${key}`);
+    })
     .then(() => undefined);
 }
 
@@ -110,13 +144,21 @@ export function mirrorDelete(name: string, key: string): void {
   if (!coll) return;
   chain = chain
     .then(() => coll.deleteOne({ _id: key as never }))
-    .catch((err) => logger.warn({ err }, `mongo mirror delete failed: ${name}/${key}`))
+    .catch((err) => {
+      mirrorFailure = err instanceof Error ? err : new Error(String(err));
+      logger.warn({ err }, `mongo mirror delete failed: ${name}/${key}`);
+    })
     .then(() => undefined);
 }
 
-/** Resolves when every queued mirror write has landed in Mongo. */
-export function flushMongo(): Promise<void> {
-  return chain;
+/** Resolves only when every queued mirror write has landed in Mongo. */
+export async function flushMongo(): Promise<void> {
+  await chain;
+  if (mirrorFailure) {
+    const failure = mirrorFailure;
+    mirrorFailure = null;
+    throw failure;
+  }
 }
 
 /**

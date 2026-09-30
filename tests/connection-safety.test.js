@@ -21,6 +21,26 @@ test('libsignal SessionEntry key dumps are suppressed without hiding normal cons
   }
 });
 
+test('complete auth persistence covers Signal key mutations and restores before SESSION_ID fallback', () => {
+  const auth = fs.readFileSync(path.join(__dirname, '../src/core/auth.ts'), 'utf8');
+  const persistence = fs.readFileSync(
+    path.join(__dirname, '../src/core/auth-persistence.ts'),
+    'utf8',
+  );
+  const startup = fs.readFileSync(path.join(__dirname, '../src/index.ts'), 'utf8');
+
+  assert.match(auth, /state\.keys\.set\s*=\s*async/);
+  assert.match(auth, /persistCompleteAuthState/);
+  assert.match(persistence, /aes-256-gcm/);
+  assert.match(persistence, /SESSION_ID changed/);
+  assert.ok(
+    startup.indexOf('await initMongo()') < startup.indexOf('await restoreCompleteAuthState()'),
+  );
+  assert.ok(
+    startup.indexOf('await restoreCompleteAuthState()') < startup.indexOf('await restoreSessionFromEnv()'),
+  );
+});
+
 test('connection-replaced code 440 exits instead of creating a reconnect fight', () => {
   const source = fs.readFileSync(
     path.join(__dirname, '../src/core/connection.ts'),

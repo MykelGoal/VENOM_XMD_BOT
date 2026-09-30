@@ -7,8 +7,12 @@ import { enforceAntilink } from '../middleware/antilink';
 import { handleAfk } from './afk.handler';
 import { handleVoiceNote } from './voice.handler';
 import { userRepo } from '../database/repositories/user.repo';
-import { groupStatsRepo } from '../database/repositories/groupstats.repo';
+import {
+  groupStatsRepo,
+  isMeaningfulActivity,
+} from '../database/repositories/groupstats.repo';
 import { settingsRepo } from '../database/repositories/settings.repo';
+import { groupBrainRepo } from '../database/repositories/groupbrain.repo';
 import { msgCache } from '../core/msgcache';
 import { logger } from '../utils/logger';
 
@@ -98,7 +102,14 @@ async function handleOneMessage(
 
   // Track per-group member activity (for .groupstats / .active / .inactive).
   if (msg.isGroup) {
-    groupStatsRepo.record(msg.chat, msg.senderNumber);
+    // LID-mode participant events may only expose an alias. Reconcile it to
+    // the phone-number identity as soon as that member sends a message.
+    groupBrainRepo.reconcileMemberAlias(msg.chat, msg.senderNumber, msg.sender);
+    const type = String(msg.type ?? '');
+    groupStatsRepo.record(msg.chat, msg.senderNumber, {
+      meaningful: isMeaningfulActivity(msg.body, type, env.prefix),
+      media: ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage'].includes(type),
+    });
   }
 
   // Passive presence behaviors only run after moderation has allowed a message.

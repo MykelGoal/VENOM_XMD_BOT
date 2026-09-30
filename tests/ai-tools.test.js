@@ -26,6 +26,13 @@ test('natural sensitivity requests deterministically select the sensi command', 
   });
 });
 
+test('natural image requests deterministically select legitimate image generation', () => {
+  assert.deepEqual(parseNaturalCommandRequest('Venom create an image of a red and black Free Fire tournament poster'), {
+    command: 'imagine',
+    args: 'a red and black Free Fire tournament poster',
+  });
+});
+
 test('natural command shortcut does not hijack general sensitivity conversation', () => {
   assert.equal(parseNaturalCommandRequest('what is sensitivity?'), null);
   assert.equal(parseNaturalCommandRequest('does the bot have a sensi command?'), null);

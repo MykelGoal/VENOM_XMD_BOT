@@ -47,6 +47,9 @@ export const env = {
   session: {
     id: optional('SESSION_ID', ''),
     siteUrl: optional('SESSION_SITE_URL', 'https://session-site-2odn.onrender.com'),
+    // Encrypts the complete Baileys Signal-key archive before Mongo storage.
+    // If omitted, SESSION_ID is used as the encryption secret.
+    authStateSecret: optional('AUTH_STATE_SECRET', ''),
   },
 
   // AI — multi-provider with automatic fallback.

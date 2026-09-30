@@ -101,6 +101,11 @@ export function parseNaturalCommandRequest(text: string): NaturalCommandRequest 
     .replace(/^\s*(?:hey\s+)?(?:venom|bot)\b[\s,:-]*/i, '')
     .replace(/\s+/g, ' ');
 
+  const imageRequest = /\b(?:create|generate|draw|make)\s+(?:me\s+)?(?:an?\s+)?(?:image|picture|poster|artwork)\s*(?:of|for|showing)?\s+(.{5,})$/i.exec(clean);
+  if (imageRequest?.[1]) {
+    return { command: 'imagine', args: imageRequest[1].trim() };
+  }
+
   const sensiWord = /\b(?:free\s*fire\s+|ff\s+)?sensi(?:tivity)?\b/i.exec(clean);
   if (!sensiWord) return null;
 

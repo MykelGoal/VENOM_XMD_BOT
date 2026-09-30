@@ -31,6 +31,14 @@ export interface TournamentPlayer {
   approvedBy?: string;
   rejectedAt?: number;
   paymentProofSubmittedAt?: number;
+  /** Opaque id printed in the bot's private owner review summary. */
+  paymentProofReviewId?: string;
+  /** Exact WhatsApp id of that bot-authored summary; quote replies bind to it. */
+  paymentProofReviewMessageId?: string;
+  /** SHA-256 only; receipt media itself is not retained by the bot. */
+  paymentProofFingerprint?: string;
+  /** Bounded, non-authoritative visible fields extracted from the receipt. */
+  paymentProofOcrSummary?: string;
   checkedInAt?: number;
   rounds: TournamentRoundScore[];
 }
