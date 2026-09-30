@@ -12,10 +12,6 @@ services:
         sync: false
       - key: OWNER_NUMBER
         sync: false
-      - key: MONGO_URI
-        sync: false
-      - key: AUTH_STATE_SECRET
-        generateValue: true
       - key: BOT_NAME
         value: VENOM-XMD
       - key: PREFIX
