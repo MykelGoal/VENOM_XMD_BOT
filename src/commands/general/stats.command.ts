@@ -1,43 +1,68 @@
 import type { Command } from '../../types/command.type';
-import { reply, react } from '../../services/message.service';
-import { getStats } from '../../services/stats.service';
-import { env } from '../../config';
+import { reply } from '../../services/message.service';
+import { getGroupMetadata } from '../../services/group.service';
+import { groupStatsRepo } from '../../database/repositories/groupstats.repo';
+import { groupBrainRepo } from '../../database/repositories/groupbrain.repo';
+import { configuredProviders } from '../../services/ai.service';
+import { isMongoEnabled } from '../../database/mongo';
 
-/** Show VENOM's growth stats — GitHub stars, YouTube subs, TikTok, etc. */
+function uptime(): string {
+  const total = Math.floor(process.uptime());
+  const days = Math.floor(total / 86_400);
+  const hours = Math.floor((total % 86_400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  return [days ? `${days}d` : '', hours ? `${hours}h` : '', `${minutes}m`]
+    .filter(Boolean)
+    .join(' ');
+}
+
+/** Operational statistics only—no growth counters or social promotion. */
 const stats: Command = {
   name: 'stats',
-  aliases: ['growth', 'followers', 'stars'],
+  aliases: ['botstats'],
   category: 'general',
-  description: 'Show VENOM-XMD growth stats (GitHub stars, subs, followers).',
+  description: 'Show operational or meaningful group activity statistics.',
   usage: 'stats',
   async run({ sock, msg }) {
-    await react(sock, msg, '📈');
-    const s = await getStats();
-
-    const lines: string[] = [`📈 *VENOM-XMD — Growth*`, ''];
-    if (s.githubStars !== undefined) lines.push(`⭐ GitHub stars: *${s.githubStars}*`);
-    if (s.githubForks !== undefined) lines.push(`🍴 Forks: *${s.githubForks}*`);
-    if (s.youtubeSubs !== undefined) lines.push(`📺 YouTube subs: *${s.youtubeSubs}*`);
-    if (s.tiktokFollowers !== undefined)
-      lines.push(`🎵 TikTok followers: *${s.tiktokFollowers}*`);
-    for (const [k, v] of Object.entries(s.manual)) {
-      if (k === 'tiktok') continue;
-      lines.push(`• ${k}: *${v}*`);
+    if (!msg.isGroup) {
+      const providers = configuredProviders();
+      await reply(
+        sock,
+        msg,
+        [
+          '📊 *Operational status*',
+          `Uptime: *${uptime()}*`,
+          `Durable storage: *${isMongoEnabled() ? 'MongoDB connected' : 'local only ⚠️'}*`,
+          `Conversation providers: *${providers.length ? providers.join(' → ') : 'none configured'}*`,
+        ].join('\n'),
+      );
+      return;
     }
 
-    lines.push(
-      '',
-      '🕷️ *Join the crew:*',
-      `⭐ Star: github.com/${env.social.githubRepo}`,
-      `📢 Channel: ${env.social.whatsappChannel}`,
-      `🎵 TikTok: ${env.social.tiktokHandle}`,
-      `📺 YouTube: ${env.social.youtubeHandle}`,
-      '',
-      'Want your OWN bot? Deploy free — it takes 2 minutes.',
+    const metadata = await getGroupMetadata(sock, msg.chat);
+    const summary = groupStatsRepo.summary(msg.chat, 7);
+    const onboarding = groupBrainRepo.onboardingCounts(msg.chat);
+    const quiet = Math.max(0, metadata.participants.length - summary.uniqueActive);
+    const trend = summary.changePct === undefined
+      ? 'new baseline'
+      : `${summary.changePct >= 0 ? '+' : ''}${summary.changePct}% vs previous 7 days`;
+    await reply(
+      sock,
+      msg,
+      [
+        `📊 *${metadata.subject} — 7-day activity*`,
+        `Members: *${metadata.participants.length}*`,
+        `Meaningful messages: *${summary.meaningfulMessages}* · ${trend}`,
+        `Highly active: *${summary.highlyActive}*`,
+        `Active: *${summary.active}*`,
+        `Light: *${summary.light}*`,
+        `Quiet: *${quiet}*`,
+        `Introductions: *${onboarding.completed}/${onboarding.tracked}*`,
+        ...(summary.peakDate ? [`Peak: *${summary.peakDate}* (${summary.peakMessages})`] : []),
+        '',
+        '_Commands, bot output, welcomes, reminders and system events are excluded._',
+      ].join('\n'),
     );
-
-    await react(sock, msg, '✅');
-    await reply(sock, msg, lines.join('\n'));
   },
 };
 
